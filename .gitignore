@@ -1,0 +1,9 @@
+data/*
+outputs/*
+doc/*
+code_archive/*
+
+.Rproj.user
+*.rds
+*.Rproj
+*.DS_Store
