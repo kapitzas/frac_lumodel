@@ -154,6 +154,7 @@ allocation <- function(lu, sm, params, dmd, ln, constraint){
   
   #First land use map becomes "candidate" on which allocations take place iteratively
   p_t1_candidate <- p_t0
+  are_zero <- which(p_t0 == 0)
   
   # Iterative allocation
   while ((sum(dev_diff > rep(max_dev,k)) !=0) & count < max_it) {
@@ -174,8 +175,6 @@ allocation <- function(lu, sm, params, dmd, ln, constraint){
     ideal_change[cand_0] <- sm[cand_0]
     
     ideal_change[which(ideal_change == 1)] <- 0
-    
-    #ideal_change <- elasticities(ideal_change, elas = elas)
     
     #Calculate Relative suitability (r) from change factors. Sums to 1 in each column
     rel_suitability <- ideal_change %*% diag(1/colSums(ideal_change))
@@ -198,35 +197,9 @@ allocation <- function(lu, sm, params, dmd, ln, constraint){
     if(any(demand_t1 == 0)){
       p_t1_proposal[, which(demand_t1 == 0)] <- 0
     }
-    
+
     if(!is.null(constraint)){
-      if(constraint == "treshold"){
-        if(any(ch_thresh != 0)){
-          ch_classes <- which(ch_thresh != 0)
-          chl <- length(ch_classes)
-          for(ch in 1:chl){
-            p_t1_proposal[which(ln[,ch] < ch_thresh[ch_classes[ch]] & p_t0[,ch_classes[ch]] == 0), ch] <- 0
-          }
-        }
-      }
-      
-      if(constraint == "percentage"){
-        are_zero <- which(p_t0 == 0)
-        are_zero_arr <- which(p_t0 == 0, arr.ind = TRUE)
-        
-        l <- list()
-        for (i in 1:K){
-          su <- subset(are_zero, are_zero_arr[,2] == i)
-          su <- su[order(rel_suitability[su])]
-          size <- round(length(su) * 0.99)
-          l[[i]] <- su[1:size]
-        }
-        p_t1_proposal[unlist(l)] <- 0
-      }
-      
       if(constraint == "all"){
-        are_zero <- which(p_t0 == 0)
-        are_zero <- sample(are_zero, size = round(length(are_zero) * 0.9))
         p_t1_proposal[are_zero] <- 0
       }
     }
@@ -242,37 +215,6 @@ allocation <- function(lu, sm, params, dmd, ln, constraint){
     dev_diff <- diff/demand_t1 * 100
     dev_diff[which(is.na(dev_diff))] <- 0
     
-    #Change the effect of stepsize iterator (make finer)
-    #if we keep getting the exact same multinbomial draws that lead to the same, not-quite-good-enough land-use maps over and over again.
-    
-    if(count == 1){
-      dev_diff_cur <- dev_diff
-      mean_counter <- 1
-    }
-    
-    if(count > 1){
-      if(all(dev_diff_cur == dev_diff)){
-        mean_counter <- mean_counter + 1
-      }
-      if(all(dev_diff_cur != dev_diff)){
-        mean_counter <- 0 
-        dev_diff_cur <- dev_diff
-      }
-      
-      if(mean_counter == 3){
-        stepsize <- stepsize/10
-        mean_counter <- 0
-        dev_diff_cur <- dev_diff
-        print(paste0("changed stepsize to ", stepsize))
-      }
-    }
-    
-    if(stepsize < 1e-12){
-      stepsize <- params$stepsi
-      print(paste0("reset stepsize"))
-    }
-    
-    #Print output after each iteration
     cat("\r", paste0("Iteration: ", count, "    "), "Deviation from target per class [%]: ", paste(round(dev_diff, 3), sep = " "))
     
     if (count == 20000) {

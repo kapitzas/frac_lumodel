@@ -2,7 +2,7 @@ data/*
 outputs/*
 doc/*
 code_archive/*
-
+code_ideas/*
 .Rproj.user
 *.rds
 *.Rproj

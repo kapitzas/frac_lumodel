@@ -6,12 +6,14 @@ require(tidyverse)
 require(rgdal)
 
 source("./R/functions.R")
+data_path <- file.path(getwd(), "data", "data_ama")
+lu_all <- readRDS(file.path(data_path, "lu.rds"))
+mask <- readRDS(file.path(data_path, "mask_ama.rds")) #country mask
 
-preds_full <- readRDS("preds_full.rds")
-preds_semi <- readRDS("preds_semi_naive.rds")
-preds_naive <- readRDS("preds_fully_naive.rds")
+preds_full <- readRDS(file.path("outputs", "preds_full.rds"))
+preds_semi <- readRDS(file.path("outputs", "preds_semi.rds"))
+preds_naive <- readRDS(file.path("outputs", "preds_naive.rds"))
 
-data_path <- file.path(getwd(), "data_ama")
 mask <- readRDS(file.path(data_path, "mask_ama.rds")) #country mask
 
 lu_all <- readRDS(file.path(data_path, "lu.rds"))
@@ -99,7 +101,7 @@ sp <- ggplot(data_f1,
 sp + geom_boxplot(position = position_dodge(0.8), outlier.shape=".") + facet_wrap(~timestep) + labs(x = "Levels of change", y = "Difference MAE")
 
 
-sp + geom_boxplot(position = position_dodge(0.8), outlier.shape=NA) + facet_wrap(~timestep) + labs(x = "Levels of change", y = "Difference RMSE") + ylim(-1, 1)
+sp + geom_boxplot(position = position_dodge(0.8), outlier.shape=NA) + facet_wrap(~timestep) + labs(x = "Levels of change", y = "Difference RMSE") + ylim(-1, 0.1)
 
 
 sp <- ggplot(data_f2, 
