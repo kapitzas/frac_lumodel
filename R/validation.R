@@ -58,7 +58,6 @@ demands <- demand(landuse = lu_all, ts = ts, inds = NULL, k = K, type = "mean")[
 
 # Simulation parameters
 params <- list(
-  stepsi = 1,
   max_dev = 1,
   resolution = 1000000,
   max_it = 20000,
@@ -104,7 +103,7 @@ for(i in 1:(length(ts)-1)){
                         sm = sm, 
                         params = params, 
                         dmd = dmd_ts,
-                        constraint = NULL)
+                        constraint = FALSE)
   
   cat('\n')
   lu_ts[[i]] <- lu_out <- lu_pred
@@ -145,7 +144,7 @@ for(i in 1:(length(ts)-1)){
                         sm = sm, 
                         params = params, 
                         dmd = dmd_ts,
-                        constraint = NULL)
+                        constraint = FALSE)
   
   cat('\n')
   lu_ts[[i]] <- lu_out <- lu_pred
@@ -171,9 +170,9 @@ for(i in 1:(length(ts)-1)){
   
   #Predict suitability model
   ln <- neighbourhood(lu_out, 1:K, weights, mask, enr = TRUE)
-  #sm <- predict(suitmod, newdata = cbind(dat, scale(ln, center = cent, scale = scal)), type = "probs")
-  sm <- matrix(runif(K*nrow(lu)), ncol = K, nrow = nrow(lu))
-  sm <- sm/rowSums(sm)
+  sm <- predict(suitmod, newdata = cbind(dat, scale(ln, center = cent, scale = scal)), type = "probs")
+  # sm <- matrix(runif(K*nrow(lu)), ncol = K, nrow = nrow(lu))
+  # sm <- sm/rowSums(sm)
   
   #Time step demand
   dmd_t0 <- dmd[i,]
@@ -189,7 +188,7 @@ for(i in 1:(length(ts)-1)){
                         sm = sm, 
                         params = params, 
                         dmd = dmd_ts,
-                        constraint = "all")
+                        constraint = TRUE)
   
   cat('\n')
   lu_ts[[i]] <- lu_out <- lu_pred

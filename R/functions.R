@@ -114,50 +114,36 @@ demand <- function(inds = NULL, landuse, ts, path = NULL, k, type = "mean"){
 ####------------------####
 allocation <- function(lu, sm, params, dmd, ln, constraint){
   
+  #number of land use classes and number of cells
   k <- ncol(lu)
   n <- nrow(lu)
   
   resolution <- params$resolution
-  no_change <- (1:k)%in%params$no_change
+  max_dev <- params$max_dev
   
   #Turn intiital land use into integer counts
   p_t0 <- integerify(lu, resolution = resolution)
   
   #Convert demand time series to integer counts
   supply_t0 <- colSums(p_t0) #Initial land use
-  if(any(no_change)){
-    sum_nochange <- sum(supply_t0) - supply_t0[which(no_change)]
-    demand_traj <- integerify(x = dmd[,-which(no_change)], resolution = sum_nochange) #Turn into integer counts
-    
-    demand_traj <- cbind(demand_traj, supply_t0[which(no_change)])
-  }else{
-    demand_traj <- integerify(x = dmd, resolution = sum(supply_t0))
-  }
-  
-  demand_t1 <- demand_traj[2,] #Second row of demand trajectory is demand to be allocated, first 
-  
-  #First time step land use supply becomes "candidate" that gets recalculated in each iteration until it meets demand_t1
-  supply_t1_candidate <- supply_t0
-  
-  #number of land use classes and number of cells
-  
-  #Initital candidate % deviation of current supply from demand, gets recalculated in each iteration until it's below max_dev
-  max_dev <- params$max_dev
-  dev_diff <- abs(diff(dmd))/dmd[1,] * 100
+  demand_traj <- integerify(x = dmd, resolution = sum(supply_t0))
+  demand_t1 <- demand_traj[2,] #Second row of demand trajectory is demand to be allocated
+  supply_t1_candidate <- demand_traj[1,] #First time step land use supply becomes "candidate" that gets recalculated in each iteration until it meets demand_t1
+
+  dev_diff <- abs(diff(demand_traj))/demand_traj[1,] * 100 #Initital candidate % deviation of current supply from demand, gets recalculated in each iteration until it's below max_dev
   dev_diff[which(is.na(dev_diff))] <- 0
-  stepsize <- params$stepsi
-  ch_thresh <- params$ch_thresh
   
   #Counter
   count <- 0
-  max_it <- params$max_it
   
   #First land use map becomes "candidate" on which allocations take place iteratively
   p_t1_candidate <- p_t0
+  
+  #Determine which classes are 0 on each cell (so we can constrain growth to those that aren't 0)
   are_zero <- which(p_t0 == 0)
   
   # Iterative allocation
-  while ((sum(dev_diff > rep(max_dev,k)) !=0) & count < max_it) {
+  while (any(dev_diff > max_dev)) {
     
     #Counter increment
     count <- count + 1
@@ -168,26 +154,17 @@ allocation <- function(lu, sm, params, dmd, ln, constraint){
     #Calculate change factor (a),by how much do we have to multiply the candidate land use proportions to satisfy the modelled suitability.
     ideal_change <- (sm * resolution) / p_t1_candidate
     
-    both_0 <- is.na(ideal_change)
-    ideal_change[both_0] <- 0
+    both_0 <- is.na(ideal_change) #this determines which cells are 0 in the suitability map and the current iteration. We keep those as they are.
+    ideal_change[both_0] <- 1
     
-    cand_0 <- !is.finite(ideal_change)
+    cand_0 <- !is.finite(ideal_change) #This determines which cells are 0 in p_t1_candidate
     ideal_change[cand_0] <- sm[cand_0]
-    
-    ideal_change[which(ideal_change == 1)] <- 0
     
     #Calculate Relative suitability (r) from change factors. Sums to 1 in each column
     rel_suitability <- ideal_change %*% diag(1/colSums(ideal_change))
     
-    #rel_suitability[,no_change] <- 0
     #Allocate demand change between pixels (d), wieghted by r (d * r = m) and adjusted by stepsize (default is 1 but can be smaller for more fine-scale allocations: more stable, but slower)
-    target_lu_change_pixel <-  rel_suitability %*% diag(demand_change)  * stepsize
-    
-    #Where the current candidate deviation of supply from demand is smaller than maximum allowed deviation, make all changes 0.
-    if(any(dev_diff <= max_dev)){
-      mini_change  <- na.omit(dev_diff <= max_dev)
-      target_lu_change_pixel[,mini_change] <- 0
-    }
+    target_lu_change_pixel <-  rel_suitability %*% diag(demand_change)
     
     #Add changes to candidate map and make everyting positive.
     p_t1_proposal <- p_t1_candidate + target_lu_change_pixel
@@ -197,15 +174,13 @@ allocation <- function(lu, sm, params, dmd, ln, constraint){
     if(any(demand_t1 == 0)){
       p_t1_proposal[, which(demand_t1 == 0)] <- 0
     }
-
-    if(!is.null(constraint)){
-      if(constraint == "all"){
-        p_t1_proposal[are_zero] <- 0
-      }
+    
+    if(constraint){
+      p_t1_proposal[are_zero] <- 0
     }
     
     #Turn proposed land use map into integers
-    p_t1_candidate <- integerify(x = p_t1_proposal,  resolution = resolution, no_decrease = no_change, z = p_t1_candidate)
+    p_t1_candidate <- integerify(x = p_t1_proposal,  resolution = resolution, no_decrease = NULL, z = p_t1_candidate)
     
     #ii Calcuate new candidate supply, i.e. the supply of the currently proposed candidate
     supply_t1_candidate <- colSums(p_t1_candidate)
@@ -216,10 +191,6 @@ allocation <- function(lu, sm, params, dmd, ln, constraint){
     dev_diff[which(is.na(dev_diff))] <- 0
     
     cat("\r", paste0("Iteration: ", count, "    "), "Deviation from target per class [%]: ", paste(round(dev_diff, 3), sep = " "))
-    
-    if (count == 20000) {
-      stop("algorithm failed to converge")
-    }
   }
   
   #When allocations are ready, return result
