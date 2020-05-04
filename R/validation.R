@@ -16,7 +16,7 @@ lu_all <- readRDS(file.path(data_path, "lu.rds"))
 mask <- readRDS(file.path(data_path, "mask_ama.rds")) #country mask
 
 ts <- 1991 + c(1, 5, 10, 15, 20, 25, 27)
-K <- 13
+K <- ncol(lu_all)/length(ts)
 n <- nrow(lu_all)
 lu <- lu_all[,1:K]
 
@@ -24,7 +24,6 @@ lu <- lu_all[,1:K]
 weights <- list(matrix(1/9, 3, 3, byrow= TRUE)) #size of window
 weights <- rep(weights, length.out = K)
 ln <- neighbourhood(lu, c(1:K), weights, mask, enr = TRUE)
-
 ln <- scale(ln)
 
 cent <- attr(ln,c("scaled:center"))
@@ -59,15 +58,7 @@ demands <- demand(landuse = lu_all, ts = ts, inds = NULL, k = K, type = "mean")[
 # Simulation parameters
 params <- list(
   max_dev = 1,
-  resolution = 1000000,
-  max_it = 20000,
-  ch_thresh = c(0.5, 0.5, #crop, crop_natveg_mosaic, 
-                0.5, 0.5, 0.5, #tree_co, tree_mixed, treeshrub_herb_mosaic, 
-                0.5, 0.5,  0.5, #shrub, grass, spares, 
-                0.5, 0.5, #tree_water, shrub_water, 
-                0.5, #urban, 
-                0.5, 0.5),#bare, snow_ice
-  no_change = 13
+  resolution = 1000000
 )
 
 # 4.a Fully Naive model simulation

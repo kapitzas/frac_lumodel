@@ -7,8 +7,8 @@ require(raster)
 require(stringr)
 require(SpaDES)
 
-data_path <- file.path(getwd(), "data_ama")
-temp_path <- file.path(getwd(), "data_ama", "temp")
+data_path <- file.path(getwd(), "data", "data_ama")
+temp_path <- file.path(getwd(), "data" , "data_ama", "temp")
 raw_path <-  file.path(path.expand("~"), "OneDrive - The University of Melbourne", "PhD - Large Files", "PhD - Raw Data")
 
 
@@ -317,6 +317,20 @@ for(i in 1:length(fl_cov)){
   r <- r[inds]
   cov_mat[,i] <- r
 }
+
+data_path <- file.path(getwd(), "data", "data_ama")
+dat <- readRDS(file.path(data_path, "cov.rds")) #dynamic bioclimatic variables
+lu_all <- readRDS(file.path(data_path, "lu.rds"))
+mask <- readRDS(file.path(data_path, "mask_ama.rds")) #country mask
+
+mask_cols <- c(grep(pattern = "l04", colnames(lu_all)), grep(pattern = "l13", colnames(lu_all)))
+mask_rows <- which(rowSums(lu_all[, mask_cols]) > 0) #get rid of lu classes that have less than 10 cells with values.
+dat <- dat[-mask_rows,]
+lu_all <- lu_all[-mask_rows, -mask_cols]
+saveRDS(lu_all, file.path(data_path, "lu.rds"))
+saveRDS(dat, file.path(data_path, "cov.rds"))
+mask[which(!is.na(mask[]))[mask_rows]] <- NA
+saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
 
 colnames(cov_mat) <- colnames
 saveRDS(cov_mat, file = file.path(data_path, "cov.rds"), compress = TRUE)
