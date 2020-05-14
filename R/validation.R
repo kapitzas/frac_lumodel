@@ -70,6 +70,7 @@ dmd <- dmd[which(dmd[,1]%in%ts),-1]
 #Prepare variables
 lu_out <- lu
 lu_ts <- list()
+lu_suit <- list()
 lu_pred <- matrix(NA, nrow(lu), ncol(lu))
 colnames(lu_pred) <- colnames(lu)
 
@@ -98,9 +99,11 @@ for(i in 1:(length(ts)-1)){
   
   cat('\n')
   lu_ts[[i]] <- lu_out <- lu_pred
+  lu_suit[[i]] <- sm
 }
 
 saveRDS(lu_ts, file = file.path("outputs", "preds_naive.rds"))
+saveRDS(lu_suit, file = file.path("outputs", "suit_naive.rds"))
 
 # 4.b semi-naive model
 
@@ -111,6 +114,7 @@ dmd <- dmd[which(dmd[,1]%in%ts),-1]
 #Prepare variables
 lu_out <- lu
 lu_ts <- list()
+lu_suit <- list()
 lu_pred <- matrix(NA, nrow(lu), ncol(lu))
 colnames(lu_pred) <- colnames(lu)
 
@@ -139,10 +143,11 @@ for(i in 1:(length(ts)-1)){
   
   cat('\n')
   lu_ts[[i]] <- lu_out <- lu_pred
+  lu_suit[[i]] <- sm
 }
 
 saveRDS(lu_ts, file = file.path("outputs", "preds_semi.rds"))
-
+saveRDS(lu_suit, file = file.path("outputs", "suit_semi.rds"))
 #4. c Full model
 
 #Demand
@@ -152,6 +157,7 @@ dmd <- dmd[which(dmd[,1]%in%ts),-1]
 #Prepare variables
 lu_out <- lu
 lu_ts <- list()
+lu_suit <- list()
 lu_pred <- matrix(NA, nrow(lu), ncol(lu))
 colnames(lu_pred) <- colnames(lu)
 
@@ -183,9 +189,11 @@ for(i in 1:(length(ts)-1)){
   
   cat('\n')
   lu_ts[[i]] <- lu_out <- lu_pred
+  lu_suit[[i]] <- sm
 }
 
 saveRDS(lu_ts, file = file.path("outputs", "preds_full.rds"))
+saveRDS(lu_suit, file = file.path("outputs", "suit_full.rds"))
 
 
 

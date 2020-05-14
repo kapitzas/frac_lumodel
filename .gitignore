@@ -3,6 +3,7 @@ outputs/*
 doc/*
 code_archive/*
 code_ideas/*
+PREDICTS/*
 .Rproj.user
 *.rds
 *.Rproj
