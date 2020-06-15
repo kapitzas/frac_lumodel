@@ -112,7 +112,7 @@ demand <- function(inds = NULL, landuse, ts, path = NULL, k, type = "mean"){
 ####------------------####
 ####5) Allocate demand####
 ####------------------####
-allocation <- function(lu, sm, params, dmd, ln, constraint){
+allocation <- function(lu, sm, params, dmd, ln, constraint, growth){
   
   #number of land use classes and number of cells
   k <- ncol(lu)
@@ -120,7 +120,7 @@ allocation <- function(lu, sm, params, dmd, ln, constraint){
   
   resolution <- params$resolution
   max_dev <- params$max_dev
-  
+  growth <- params$growth
   #Turn intiital land use into integer counts
   p_t0 <- integerify(lu, resolution = resolution)
   
@@ -129,7 +129,7 @@ allocation <- function(lu, sm, params, dmd, ln, constraint){
   demand_traj <- integerify(x = dmd, resolution = sum(supply_t0))
   demand_t1 <- demand_traj[2,] #Second row of demand trajectory is demand to be allocated
   supply_t1_candidate <- demand_traj[1,] #First time step land use supply becomes "candidate" that gets recalculated in each iteration until it meets demand_t1
-
+  
   dev_diff <- abs(diff(demand_traj))/demand_traj[1,] * 100 #Initital candidate % deviation of current supply from demand, gets recalculated in each iteration until it's below max_dev
   dev_diff[which(is.na(dev_diff))] <- 0
   
@@ -140,7 +140,15 @@ allocation <- function(lu, sm, params, dmd, ln, constraint){
   p_t1_candidate <- p_t0
   
   #Determine which classes are 0 on each cell (so we can constrain growth to those that aren't 0)
-  are_zero <- which(p_t0 == 0)
+  if(constraint){
+    are_zero <- p_t0 == 0
+    inds_list <- list()
+    for(i in 1:K){
+      inds <- which(are_zero[,i])
+      inds_list[[i]] <- sample(inds, size = length(inds) * ((100-growth[i])/100))
+    }
+  }
+  
   
   # Iterative allocation
   while (any(dev_diff > max_dev)) {
@@ -176,7 +184,9 @@ allocation <- function(lu, sm, params, dmd, ln, constraint){
     }
     
     if(constraint){
-      p_t1_proposal[are_zero] <- 0
+      for(i in 1:K){
+        p_t1_proposal[inds_list[[i]], i] <- 0
+      }
     }
     
     #Turn proposed land use map into integers
@@ -285,39 +295,68 @@ elasticities2 <- function(ideal_change, elas){
 }
 
 #below is from http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/
+
+summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
+                      conf.interval=.95, .drop=TRUE) {
+  library(plyr)
   
-  summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
-                        conf.interval=.95, .drop=TRUE) {
-    library(plyr)
-    
-    # New version of length which can handle NA's: if na.rm==T, don't count them
-    length2 <- function (x, na.rm=FALSE) {
-      if (na.rm) sum(!is.na(x))
-      else       length(x)
-    }
-    
-    # This does the summary. For each group's data frame, return a vector with
-    # N, mean, and sd
-    datac <- ddply(data, groupvars, .drop=.drop,
-                   .fun = function(xx, col) {
-                     c(N    = length2(xx[[col]], na.rm=na.rm),
-                       mean = mean   (xx[[col]], na.rm=na.rm),
-                       sd   = sd     (xx[[col]], na.rm=na.rm)
-                     )
-                   },
-                   measurevar
-    )
-    
-    # Rename the "mean" column    
-    datac <- rename(datac, c("mean" = measurevar))
-    
-    datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
-    
-    # Confidence interval multiplier for standard error
-    # Calculate t-statistic for confidence interval: 
-    # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
-    ciMult <- qt(conf.interval/2 + .5, datac$N-1)
-    datac$ci <- datac$se * ciMult
-    
-    return(datac)
+  # New version of length which can handle NA's: if na.rm==T, don't count them
+  length2 <- function (x, na.rm=FALSE) {
+    if (na.rm) sum(!is.na(x))
+    else       length(x)
   }
+  
+  # This does the summary. For each group's data frame, return a vector with
+  # N, mean, and sd
+  datac <- ddply(data, groupvars, .drop=.drop,
+                 .fun = function(xx, col) {
+                   c(N    = length2(xx[[col]], na.rm=na.rm),
+                     mean = mean   (xx[[col]], na.rm=na.rm),
+                     sd   = sd     (xx[[col]], na.rm=na.rm)
+                   )
+                 },
+                 measurevar
+  )
+  
+  # Rename the "mean" column    
+  datac <- rename(datac, c("mean" = measurevar))
+  
+  datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
+  
+  # Confidence interval multiplier for standard error
+  # Calculate t-statistic for confidence interval: 
+  # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
+  ciMult <- qt(conf.interval/2 + .5, datac$N-1)
+  datac$ci <- datac$se * ciMult
+  
+  return(datac)
+}
+
+#Caluclate metrics
+diff_metrics <- function(obs, preds, mask, reference = NULL,...){
+  preds <- c(obs[1], preds[1:6])
+  cont_tables <- list()
+  inds <- which(!is.na(mask[]))
+  out <- list()
+  for(j in 1:K){
+    change_obs <- change_pred <- mask
+    for (i in 2:(length(obs))){
+      if(!is.null(reference)){
+        ref <- reference
+      }else{
+        ref <- i-1
+      }
+      change_pred[inds[which(preds[[ref]][,j] > preds[[i]][,j])]] <- 1 #decrease
+      change_pred[inds[which(preds[[ref]][,j] == preds[[i]][,j])]] <- 2 #same
+      change_pred[inds[which(preds[[ref]][,j] < preds[[i]][,j])]] <- 3 #increase
+      
+      change_obs[inds[which(obs[[ref]][,j] > obs[[i]][,j])]] <- 1 #decrease
+      change_obs[inds[which(obs[[ref]][,j] == obs[[i]][,j])]] <- 2 #same
+      change_obs[inds[which(obs[[ref]][,j] < obs[[i]][,j])]] <- 3 #increase
+      
+      cont_tables[[i-1]] <- diffeR::crosstabm(change_pred, change_obs, ...)
+    }
+    out[[j]] <- cont_tables
+  }
+  out
+}
