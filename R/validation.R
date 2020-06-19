@@ -47,7 +47,11 @@ sm <- predict(suitmod, newdata = data, type = "probs")
 
 #Determine how much we can allocate into cells that are 0
 #Turn lu data into a list of matrices (need to change code so it's stored this way to begin with)
+<<<<<<< HEAD
 K <- ncol(lu)
+=======
+K <- 11
+>>>>>>> 33992158e3c8db6838da77db2b795be97975c581
 ts_inds <- 1:length(ts)
 lu_obs <- list()
 start <- seq(1,ncol(lu_all), by = K)

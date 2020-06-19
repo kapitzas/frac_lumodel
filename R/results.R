@@ -107,13 +107,18 @@ data_f1 <- cbind(tibble(
 #mutate("category" = cut(null_rmse, breaks=c(-Inf, 0.1, 0.2, 0.3, 0.4, 0.5, Inf), 
 #                       labels=c("<0.1","0.2", "0.3", "0.4","0.5",  ">0.5")))
 
+<<<<<<< HEAD
 data_f1 <- data_f1 %>% gather(key = "model", value = "diffs", "full", "semi-naive", "naive")
+=======
+data_f1 <- data_f1 %>% gather(key = "model", value = "diffs", "suit + constraints", "suit", "naive")
+>>>>>>> 33992158e3c8db6838da77db2b795be97975c581
 #data_f1 <- data_f1 %>% gather(key = "model", value = "diffs", "null_rmse", "full_rmse", "semi_rmse", "naive_rmse")
 
 data_aggr <- summarySE(data_f1, "diffs", groupvars = c("year", "category", "model"), conf.interval=0.95)
 
 # Use a consistent y range
 gpl <- ggplot(data_aggr, aes(x=year, y=diffs, colour=model)) + scale_colour_viridis_d(option = "viridis", begin = 0.1, end = 0.9)
+<<<<<<< HEAD
 gpl + geom_point() + 
   geom_errorbar(aes(ymin=diffs-ci, ymax=diffs+ci), width=.4) + 
   geom_line() + 
@@ -127,6 +132,11 @@ ggsave("figure2.pdf", path = figure_path, width = 18, height = 10, unit = "cm")
 
 figure_path <- "/Users/simon/OneDrive - The University of Melbourne/PhD/writing/papers/MEE/figures/"
 
+=======
+gpl + geom_point() + geom_errorbar(aes(ymin=diffs-ci, ymax=diffs+ci), width=.4) + geom_line() + facet_wrap(~category) + geom_hline(yintercept = 0, linetype="dashed") + theme_bw() + scale_x_continuous(breaks = seq(5, 25, by = 5)) + ylab("RMSE difference to null")
+
+
+>>>>>>> 33992158e3c8db6838da77db2b795be97975c581
 # #When observed change is always 0, the true negative is 1 and true positive 0
 preds_null <- list()
 for(i in 1:length(preds_full)){
@@ -155,6 +165,7 @@ t1$timestep <- as.factor(rep(c(5, 10, 15, 20, 25, 27), each = 4))
 sp <- ggplot(t1, aes(x = timestep, y = diff, colour = model))
 sp + geom_point(position=position_dodge(0.3), shape = 16) + scale_colour_viridis_d(option = "viridis", begin = 0.95, end = 0.05) + theme_bw() + ylab("disagreement [% of observations]") + xlab("Year")
 
+<<<<<<< HEAD
 
 t1$timestep <- as.factor(paste0("timestep ", rep(c("05", 10, 15, 20, 25, 27), each = 4)))
 sp <- ggplot(t1, aes(x = model, y = diff, colour = lu))
@@ -168,5 +179,10 @@ sp + geom_point(position=position_dodge(0.3), shape = 16) +
 ggsave("figure3.pdf", path = figure_path, width = 18, height = 10, unit = "cm", dpi = 600)
 
 
+=======
+t1$timestep <- as.factor(paste0("timestep ", rep(c("05", 10, 15, 20, 25, 27), each = 4)))
+sp <- ggplot(t1, aes(x = model, y = diff, colour = lu))
+sp + geom_point(position=position_dodge(0.3), shape = 16) + scale_colour_viridis_d(option = "viridis", begin = 0.95, end = 0.05) + theme_bw() + ylab("disagreement [% of observations]") + xlab("Model") + facet_wrap(~timestep)
+>>>>>>> 33992158e3c8db6838da77db2b795be97975c581
 #+ geom_line(aes(group = interaction(lu, model)), position = position_dodge(0.6), size = 0.1)
 
