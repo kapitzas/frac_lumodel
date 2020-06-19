@@ -45,10 +45,29 @@ subs_mod <- sample(1:nrow(lu), 20000)
 suitmod <- suitmodel(form = form, lu = lu[subs_mod,], data = data[subs_mod,], resolution = 10000, model = FALSE, maxit = 10000)
 sm <- predict(suitmod, newdata = data, type = "probs")
 
+#Determine how much we can allocate into cells that are 0
+#Turn lu data into a list of matrices (need to change code so it's stored this way to begin with)
+K <- ncol(lu)
+ts_inds <- 1:length(ts)
+lu_obs <- list()
+start <- seq(1,ncol(lu_all), by = K)
+for(i in 1:length(start)){
+  lu_obs[[i]] <- as.data.frame(lu_all[,start[i]:(start[i]+(K-1))])
+  names(lu_obs[[i]]) <- paste0("lu", 1:K, ".obs")
+  print(i)
+}
+
+ch_ma <- matrix(NA, nrow = 6, ncol = K)
+for(i in 2:7){
+  for(j in 1:K){
+    ch_ma[i-1, j] <- length(lu_obs[[i-1]][which(lu_obs[[i-1]][,j] == 0 & lu_obs[[i]][,j] != 0),i])/n * 100
+  }
+}
+
+
 #-----------------#
 #### 3. DEMAND ####
 #-----------------#
-
 demands <- demand(landuse = lu_all, ts = ts, inds = NULL, k = K, type = "mean")[,1:(K+1)]
 
 #---------------------#
@@ -58,7 +77,8 @@ demands <- demand(landuse = lu_all, ts = ts, inds = NULL, k = K, type = "mean")[
 # Simulation parameters
 params <- list(
   max_dev = 1,
-  resolution = 1000000
+  resolution = 1000000,
+  growth = colMeans(ch_ma)
 )
 
 # 4.a Fully Naive model simulation
@@ -148,6 +168,7 @@ for(i in 1:(length(ts)-1)){
 
 saveRDS(lu_ts, file = file.path("outputs", "preds_semi.rds"))
 saveRDS(lu_suit, file = file.path("outputs", "suit_semi.rds"))
+
 #4. c Full model
 
 #Demand

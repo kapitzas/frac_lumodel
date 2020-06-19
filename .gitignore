@@ -4,7 +4,10 @@ doc/*
 code_archive/*
 code_ideas/*
 PREDICTS/*
+model_examples/*
 .Rproj.user
 *.rds
 *.Rproj
 *.DS_Store
+*.RData
+*.Rhistory

@@ -1,16 +1,15 @@
 gc()
+
 require(devtools)
 require(WorldClimTiles)
-require(gdaltools)
 require(rgdal)
+require(gdaltools)
 require(raster)
 require(stringr)
-require(SpaDES)
 
 data_path <- file.path(getwd(), "data", "data_ama")
 temp_path <- file.path(getwd(), "data" , "data_ama", "temp")
 raw_path <-  file.path(path.expand("~"), "OneDrive - The University of Melbourne", "PhD - Large Files", "PhD - Raw Data")
-
 
 # lu2 <- list.files(raw_path, pattern = "nc", full.names = TRUE)
 # 
@@ -54,13 +53,11 @@ uniq <- list()
 for(i in 1:nlayers(lu)){
   uniq[[i]] <- unique(lu[[i]][])
 }
-table(unlist(uniq))
-all(unlist(lapply(uniq, FUN = length)) == 26)
+
 
 crop <- c(10, 11, 12, 20)
 crop_natveg_mosaic <- c(30, 40)
-tree_co <- c(50, 60, 61, 62, 70, 80) #>15% cover
-tree_mixed <- c(90) #mixed leaf
+tree_co <- c(50, 60, 61, 62, 70, 80, 90) #>15% cover
 treeshrub_herb_mosaic <- c(100,110)
 shrub <- c(120,122)
 grass <- c(130)
@@ -81,16 +78,15 @@ for(j in ts){
   r[r%in%crop] <- 1
   r[r%in%crop_natveg_mosaic] <- 2
   r[r%in%tree_co] <- 3
-  r[r%in%tree_mixed] <- 4 #mixed leaf
-  r[r%in%treeshrub_herb_mosaic] <- 5
-  r[r%in%shrub] <- 6
-  r[r%in%grass] <- 7
-  r[r%in%sparse] <- 8
-  r[r%in%tree_water] <- 9
-  r[r%in%shrub_water] <- 10
-  r[r%in%urban] <- 11
-  r[r%in%bare] <- 12
-  r[r%in%snow_ice] <- 13
+  r[r%in%treeshrub_herb_mosaic] <- 4
+  r[r%in%shrub] <- 5
+  r[r%in%grass] <- 6
+  r[r%in%sparse] <- 7
+  r[r%in%tree_water] <- 8
+  r[r%in%shrub_water] <- 9
+  r[r%in%urban] <- 10
+  r[r%in%bare] <- 11
+  r[r%in%snow_ice] <- NA
   r[r%in%water] <- NA
   
   cat(paste0("Layerizing...",   "\n"), file = logfile, append = TRUE)
@@ -111,12 +107,13 @@ for(j in ts){
 }
 
 unlink(file.path(temp_path, "lu.ama.tif"))
+
 ####################
 ###PREPROCESSING####
 ####################
-mask <- raster("/Users/simon/OneDrive - The University of Melbourne/PhD/chapter2/data_ama/temp/ts1992_l01_ama.tif")
+mask <- raster("~/OneDrive - The University of Melbourne/PhD/chapter2/data/data_ama/temp/ts1992_l01_ama.tif")
 mask[!is.na(mask[])] <- 1
-mask <-mask(mask, boundary)
+mask <-raster::mask(mask, boundary)
 plot(mask)
 saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
 
@@ -304,8 +301,6 @@ for(i in 1:length(fl_lu)){
 colnames(lu_mat) <- colnames
 saveRDS(lu_mat, file = file.path(data_path, "lu.rds"), compress = TRUE)
 
-rm(lu_mat)
-
 fl_cov <- fl[-which(grepl("ts", fl))]
 cov_mat <- matrix(data = NA, nrow = length(inds), ncol = length(fl_cov))
 colnames <- character()
@@ -318,19 +313,25 @@ for(i in 1:length(fl_cov)){
   cov_mat[,i] <- r
 }
 
+
 data_path <- file.path(getwd(), "data", "data_ama")
 dat <- readRDS(file.path(data_path, "cov.rds")) #dynamic bioclimatic variables
 lu_all <- readRDS(file.path(data_path, "lu.rds"))
 mask <- readRDS(file.path(data_path, "mask_ama.rds")) #country mask
+nrow(lu_all)
+nrow(dat)
+length(mask[which(!is.na(mask[]))])
 
-mask_cols <- c(grep(pattern = "l04", colnames(lu_all)), grep(pattern = "l13", colnames(lu_all)))
-mask_rows <- which(rowSums(lu_all[, mask_cols]) > 0) #get rid of lu classes that have less than 10 cells with values.
-dat <- dat[-mask_rows,]
-lu_all <- lu_all[-mask_rows, -mask_cols]
-saveRDS(lu_all, file.path(data_path, "lu.rds"))
-saveRDS(dat, file.path(data_path, "cov.rds"))
-mask[which(!is.na(mask[]))[mask_rows]] <- NA
-saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
+apply(lu_all, 2, function(x) {length(x[which(x!=0)])})
 
-colnames(cov_mat) <- colnames
+#mask_cols <- c(grep(pattern = "l04", colnames(lu_all)), grep(pattern = "l13", colnames(lu_all)))
+#mask_rows <- which(rowSums(lu_all[, mask_cols]) > 0) #get rid of lu classes that have less than 10 cells with values.
+#dat <- dat[-mask_rows,]
+# lu_all <- lu_all[-mask_rows, -mask_cols]
+# saveRDS(lu_all, file.path(data_path, "lu.rds"))
+# saveRDS(dat, file.path(data_path, "cov.rds"))
+# mask[which(!is.na(mask[]))[mask_rows]] <- NA
+# saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
+
+colnames(dat) <- colnames
 saveRDS(cov_mat, file = file.path(data_path, "cov.rds"), compress = TRUE)
