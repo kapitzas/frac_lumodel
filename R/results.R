@@ -1,10 +1,10 @@
-rm(list = ls())
+#rm(list = ls())
 
 require(raster)
 require(matrixStats)
 require(tidyverse)
 require(rgdal)
-
+require(rgeos)
 
 source("./R/functions.R")
 data_path <- file.path(getwd(), "data", "data_ama")
@@ -94,39 +94,54 @@ data_f1 <- cbind(tibble(
   "semis_rmse" = semi_rmse %>% unlist(), 
   "naives_rmse" = naive_rmse %>% unlist(), 
   "full" = full_rmse - null_rmse,
-  "semi-naive" = semi_rmse - null_rmse,
+  "semi" = semi_rmse - null_rmse,
   "naive" = naive_rmse - null_rmse,
-  "year" = rep(ts, each = nrow(q1))),
+  "Year" = rep(ts, each = nrow(q1))),
   "max.diff" = q.diff %>% unlist()) %>%
   #filter(null_mae != 0) %>%
   #mutate("category" = cut(null_rmse, breaks=3))
   mutate("category" = cut(max.diff, breaks=c(-Inf, 0.005, 0.3, 0.5, Inf), 
                           labels=c("[0, 0.005)", "[0.005, 0.3)", "[0.3, 0.5)", "[0.5, inf)")))
 
-# mutate("category" = cut(max.diff, breaks=c(-Inf, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, Inf), 
+
+# mutate("category" = cut(max.diff, breaks=c(-Inf, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, Inf),
 #                       labels=c("<0.1","0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "> 0.7")))
-#mutate("category" = cut(null_rmse, breaks=c(-Inf, 0.1, 0.2, 0.3, 0.4, 0.5, Inf), 
+# mutate("category" = cut(null_rmse, breaks=c(-Inf, 0.1, 0.2, 0.3, 0.4, 0.5, Inf),
 #                       labels=c("<0.1","0.2", "0.3", "0.4","0.5",  ">0.5")))
 
 
-data_f1 <- data_f1 %>% gather(key = "model", value = "diffs", "full", "semi-naive", "naive")
+data_f1 <- data_f1 %>% gather(key = "model", value = "diffs", "full", "semi", "naive")
 
 #data_f1 <- data_f1 %>% gather(key = "model", value = "diffs", "null_rmse", "full_rmse", "semi_rmse", "naive_rmse")
-colnames(data_f1)
-debug(summarySE)
-data_aggr <- summarySE(data_f1, measurevar = "diffs", groupvars = c("year", "category", "model"), conf.interval=0.95)
+
+col.positions <- c(1,2,3,4)
+require(scales)
+rescale(col.positions)
+data_aggr <- summarySE(data_f1, measurevar = "diffs", groupvars = c("Year", "category", "model"), conf.interval=0.95)
 
 # Use a consistent y range
+data_aggr$model <- factor(data_aggr$model, c("full", "semi", "naive"))
 figure_path <- "/Users/simon/OneDrive - The University of Melbourne/PhD/writing/papers/MEE/figures/"
-gpl <- ggplot(data_aggr, aes(x=year, y=diffs, colour=model)) + scale_colour_viridis_d(option = "viridis", begin = 0.1, end = 0.9)
-gpl + geom_point() + 
+fig2 <- ggplot(data_aggr, aes(x=Year, y=diffs, colour=model)) + scale_colour_viridis_d(option = "plasma", begin = 0.2, end = 0.6)
+fig2 <- fig2 + geom_point(shape = 16, size = 2) + 
   geom_errorbar(aes(ymin=diffs-ci, ymax=diffs+ci), width=.4) + 
   geom_line() + 
-  facet_wrap(~category) + 
+  facet_wrap(~category, scales='free') + 
   geom_hline(yintercept = 0, linetype="dashed") + 
   theme_bw() + 
-  scale_x_continuous(breaks = seq(5, 25, by = 5)) + 
-  ylab("RMSE difference to null")
+  scale_x_continuous(breaks = seq(5, 27, by = 5)) + 
+  scale_y_continuous(limits=c(-0.06, 0.03)) +
+  ylab("RMSE difference to null") + 
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"),
+        strip.background = element_rect(fill="white", colour = "white"),
+        strip.text = element_text(size=10, colour="black"), 
+        #legend.position = c(.5, .65), 
+        legend.text = element_text(size = 10, colour = "black"),
+        legend.title =  element_blank())
+
 
 ggsave("figure2.pdf", path = figure_path, width = 18, height = 10, unit = "cm")
 
@@ -156,11 +171,21 @@ t1$model <- factor(rep(c("null", "naive", "semi", "full"), each = 12), levels = 
 t1 <- t1 %>% gather(key = "timestep", value = "diff", -lu, - model)
 t1$timestep <- as.factor(rep(c(5, 10, 15, 20, 25, 27), each = 48))
 
-sp <- ggplot(t1, aes(x = timestep, y = diff, colour = model))
+t1$model <- factor(t1$model, c("full", "semi", "naive", "null"))
+fig2b <- ggplot(t1, aes(x = timestep, y = diff, colour = model))
 
-sp + geom_point(position=position_dodge(0.3), shape = 16) + scale_colour_viridis_d(option = "viridis", begin = 0.95, end = 0.05) + theme_bw() + ylab("disagreement [% of observations]") + xlab("Year")
+fig2b <- fig2b + geom_point(position=position_dodge(0.5), shape = 16, size = 2) + 
+  scale_colour_viridis_d(option = "plasma", begin = 0.2, end = 0.8) + 
+  theme_bw() + 
+  ylab("disagreement [% of observations]") + 
+  xlab("Year") +
+  theme(
+    legend.position = "right", 
+    legend.title =  element_blank(),
+    legend.text = element_text(size = 10, colour = "black"),
+    legend.margin=margin(c(0,0,0,0)))
 
-t1$timestep <- as.factor(paste0("timestep ", rep(c("05", 10, 15, 20, 25, 27), each = 4)))
+plot_grid(fig2, fig2b, nrow = 2, labels = c("a", "b"), vjust = c(1.5, -1), rel_heights = c(3,2))
 
 # sp <- ggplot(t1, aes(x = model, y = diff, colour = lu))
 # sp + geom_point(position=position_dodge(0.3), shape = 16) + 
@@ -170,7 +195,6 @@ t1$timestep <- as.factor(paste0("timestep ", rep(c("05", 10, 15, 20, 25, 27), ea
 #   xlab("Model") + facet_wrap(~timestep) + 
 #   theme(text=element_text(size=12))
 
-ggsave("figure3.pdf", path = figure_path, width = 18, height = 10, unit = "cm", dpi = 600)
 
 # t1$timestep <- as.factor(paste0("timestep ", rep(c("05", 10, 15, 20, 25, 27), each = 4)))
 # sp <- ggplot(t1, aes(x = model, y = diff, colour = lu))
@@ -188,51 +212,162 @@ dom_full <- lapply(preds_full, FUN = function(x) {as.numeric(apply(x, 1, FUN =  
 diff_obs <- lu_obs[[7]] - lu_obs[[1]]
 diff_full <- preds_full[[6]] - lu_obs[[1]]
 
-chcrop_obs <- rowSums(diff_obs[,c(1,2)]) #cropland expansion per cell
-#chcrop_obs <- diff_obs[,c(1)] #cropland expansion per cell
-chnat_obs <- rowSums(diff_obs[,c(3,4,5, 8, 9)])
-#chnat_obs <- diff_obs[,c(3)]
+crop1_obs <- diff_obs[,c(1)] #cropland expansion per cell
+crop2_obs <- diff_obs[,c(2)] #cropland expansion per cell
+nat1_obs <- diff_obs[,c(3)]
+nat2_obs <- rowSums(diff_obs[,c(4,5, 8, 9)])
 
-chcrop_full <- rowSums(diff_full[,c(1,2)]) #cropland expansion per cell
-#chcrop_full <- diff_full[,c(1)] #cropland expansion per cell
-chnat_full <- rowSums(diff_full[,c(3,4,5,6,8,9)])
-#chnat_full <- diff_full[,c(3)]
-
+crop1_full <- diff_full[,c(1)] #cropland expansion per cell
+crop2_full <- diff_full[,c(2)] #cropland expansion per cell
+nat1_full <- diff_full[,c(3)]
+nat2_full <- rowSums(diff_full[,c(4,5, 8, 9)])
+hloss <- agr_
 inds <- which(!is.na(mask[]))
 r <- mask
 r[inds] <- 0
 
-hloss_full <- hloss_obs <- r
-hloss_full[inds[which(chcrop_full > 0 & chnat_full < 0)]] <- 1
-hloss_obs[inds[which(chcrop_obs > 0 & chnat_obs < 0)]] <- 1
-hloss_full[inds[which(chcrop_full < 0 & chnat_full > 0)]] <- 2
-hloss_obs[inds[which(chcrop_obs < 0 & chnat_obs > 0)]] <- 2
+agrexp_full <- agrexp_obs <- hloss_full <- hloss_obs <- r
+
+agrexp_full[inds[which(rowSums(cbind(crop1_full, crop2_full)) > 0 & crop1_full > crop2_full)]] <- 1
+agrexp_full[inds[which(sum(crop1_full, crop2_full) > 0 & crop2_full > crop1_full)]] <- 2
+
+agrexp_obs[inds[which(rowSums(cbind(crop1_full, crop2_full)) > 0 & crop1_obs > crop2_obs)]] <- 1
+agrexp_obs[inds[which(rowSums(cbind(crop1_full, crop2_full)) > 0 & crop2_obs > crop1_obs)]] <- 2
+
+hloss_full[inds[which(rowSums(cbind(nat2_full, nat1_full)) < 0 & nat1_full < nat2_full)]] <- 1
+hloss_full[inds[which(rowSums(cbind(nat2_full, nat1_full)) < 0 & nat2_full < nat1_full)]] <- 2
+
+hloss_obs[inds[which(rowSums(cbind(nat2_full, nat1_full)) < 0 & nat1_obs < nat2_obs)]] <- 1
+hloss_obs[inds[which(rowSums(cbind(nat2_full, nat1_full)) < 0 & nat2_obs < nat1_obs)]] <- 2
+
+boundary <- readOGR("/Users/simon/OneDrive - The University of Melbourne/PhD - Large Files/PhD - Raw Data/Global/Amazon boundaries/Lim_Biogeografico.shp")
+
+?st_simplify
+boundary <- gSimplify(boundary, tol = 0.05)
+require(rasterVis)
+require(viridis)
+s <- stack(agrexp_obs, agrexp_full, hloss_obs, hloss_full)
+
+maps <- list()
+for (i in 1: nlayers(s)){
+  
+  r <- ratify(s[[i]])
+  rat <- levels(r)[[1]]
+  rat$ID <- c("0", "1", "2")
+  levels(r) <- rat
+  
+  l <- levelplot(r, att = "ID",
+                 margin=FALSE,                       
+                 colorkey=FALSE,    
+                 xlab="", ylab="",
+                 par.settings=list(
+                   strip.border=list(col='transparent'),
+                   strip.background=list(col='transparent'),
+                   axis.line=list(col='transparent')
+                 ),
+                 scales=list(draw=FALSE),            
+                 col.regions=plasma(3, begin = 0.2, end = 0.8, direction = -1),
+                 names.attr=rep('', nlayers(r))) +           
+    layer(sp.polygons(boundary, lwd=2))
+  
+  if(i%in%c(1,3)){
+    l <- l + layer(panel.text(-55, 9, labels = "observed", cex = 0.8, adj = 0, font = 2))
+  }
+  if(i%in%c(2,4)){
+    l <- l + layer(panel.text(-55, 9, labels = "predicted", cex = 0.8, adj = 0, font = 2))
+  }
+  maps[[i]] <- l
+}
+
+
+legends <- list()
+for(i in 1:2){
+  
+  if(i == 1){
+    lab <- c("no increase", "dominated by cropland increase", "dominated by cropland mosaic increase")
+  }
+  if(i == 2){
+    lab <- c("no decrease", "dominated by forest loss", "dominated by other natural habitat loss")
+  }
+  
+  leg_data <- tibble(label = lab)
+  leg_data$label <- factor(leg_data$label, lab)
+  
+  my_hist <- ggplot(leg_data, aes(label, fill = label)) + 
+    geom_bar() + 
+    scale_fill_manual(values= plasma(3, begin = 0.2, end = 0.8, direction = -1)) + 
+    theme(title = element_blank(), 
+          legend.position="bottom", 
+          legend.margin=margin(t=-0.5, r=-0.5, b=-0.5, l=-0.5, unit="cm"))
+  legends[[i]] <- cowplot::get_legend(my_hist)
+}
+
+plot_grid(arrangeGrob(maps[[1]], maps[[2]], ncol = 2), legends[[1]], arrangeGrob(maps[[3]], maps[[4]], ncol = 2), legends[[2]], nrow = 4, 
+          rel_heights = c(1/1.25, 1/12, 1/1.25, 1/12), labels = c("a", "", "b", ""))
+
+
+diff2 <- diff1 <- r
+diff1[inds] <- rowSums(cbind(crop1_obs, crop2_obs))
+diff2[inds] <- rowSums(cbind(nat1_obs, nat2_obs))
+?levelplot
+diffstack <- stack(stack(diff1, diff2))
+p1 <- levelplot(diffstack, nrow = 1,
+          margin=FALSE,                       
+          colorkey=list(space='bottom'),
+          xlab="", ylab="",
+          par.settings=list(
+            strip.border=list(col='transparent'),
+            strip.background=list(col='transparent'),
+            axis.line=list(col='transparent')
+          ),
+          scales=list(draw=FALSE),
+          names.attr=rep('', nlayers(diffstack)),
+          col.regions=gray(0:30/30)) +
+  layer(sp.polygons(boundary, lwd=2))
+p1
+install.packages("stargazer")
+require(viridis)
+?grid.arrange
+?geom_raster
+require(ggspatial)
+geom_raster()
+levelplot(hloss_obs)
+levelplot(hloss_full)
+levelplot(agrexp_full)
+levelplot(agrexp_obs)
+plot(hloss_obs)
+
+hloss_obs[inds[which(crop1_obs > 0 & nat1_obs < 0)]] <- 1
+plot(hloss_obs)
+
+hloss_full[inds[which(crop1_full > 0 & nat2_full < 0)]] <- 2
+hloss_obs[inds[which(crop1_obs > 0 & nat2_obs < 0)]] <- 2
+
+hloss_full[inds[which(crop2_full > 0 & nat1_full < 0)]] <- 3
+hloss_obs[inds[which(crop2_obs > 0 & nat1_obs < 0)]] <- 3
+
+hloss_full[inds[which(crop2_full > 0 & nat2_full < 0)]] <- 4
+hloss_obs[inds[which(crop2_obs > 0 & nat2_obs < 0)]] <- 4
 
 
 plot(hloss_full)
 plot(hloss_obs)
-r1 <- r2 <- r
-par(mfrow = c(7, 7))
-for(i in 1: ncol(data)){
-  plot(diff_obs[,2] ~ data[,i])
-}
+r3 <- r4 <- r1 <- r2 <- r
+
 r1[inds] <- diff_obs[,2]
-
 r2[inds] <- diff_full[,2]
+r3[inds] <- diff_obs[,3]
+r4[inds] <- diff_full[,3]
 
-r1[inds] <- lu_obs[[7]][,2]
-r2[inds] <- preds_full[[6]][,2]
 
 r3 <- makeRaster(mask, lu = sm, class = 2)
-rasterVis::levelplot(stack(r1, r2))
+rasterVis::levelplot(r2-r1)
+rasterVis::levelplot(stack(r1<0, r2<0))
 
-preds
-plot(makeRaster(mask, data, class = 13)
-rasterVis::levelplot(stack(r1,r3))
-makeRaster(sm)
+plot(r2)
+rasterVis::levelplot(stack(r1,r2, r3, r4))
 plot(r)
-hist(diff_full[,1])
-hist(diff_obs[,1])
+
 overallDiff(crosstabm(hloss_obs, hloss_full, percent = TRUE))
 hloss_full <- hloss_obs <- r
 hloss_full[inds[which(chnat_full < 0)]] <- 1
@@ -250,6 +385,7 @@ store <- list()
 n <- nrow(lu_obs[[1]])
 thresh <- seq(0, 1, by = 0.1)
 tables_crop <- tables_nat <- store_nat <- store_crop <- list()
+
 for(i in seq_along(thresh)[-11]){
   
   hloss_full <- hloss_obs <- r
