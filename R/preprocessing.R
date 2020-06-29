@@ -41,7 +41,7 @@ yrs <- c(1992:2018)
 lu <- stack(list.files(temp_path, pattern = "tif", full.names = TRUE))
 names(lu) <- paste0("Y", c(2016:2018, 1992:2015))
 
-mask <- lu[[1]]
+mask <- raster("/Users/simon/OneDrive - The University of Melbourne/PhD/chapter2/data/data_ama/temp/ts1992_l01_ama.tif")
 writeRaster(lu, bylayer = TRUE, filename = paste0(temp_path, "/lu_cropped_", names(lu)), format = "GTiff", overwrite = TRUE)
 
 lu <- stack(list.files(temp_path, pattern = "lu_cropped", full.names = TRUE))
@@ -70,9 +70,11 @@ water <- 210
 snow_ice <- c(220)
 
 
-for(j in ts){
+ts <- c(1, 5, 10, 15, 20, 25, 27)
+yrs <- c(1992:2018)
+
+for(j in ts[-1]){
   cat(paste0("Time step ", yrs[j], "\n"), file = logfile, append = TRUE)
-  
   cat(paste0("Reclassifying...",   "\n"), file = logfile, append = TRUE)
   r <- lu[[j]]
   r[r%in%crop] <- 1
@@ -86,14 +88,15 @@ for(j in ts){
   r[r%in%shrub_water] <- 9
   r[r%in%urban] <- 10
   r[r%in%bare] <- 11
-  r[r%in%snow_ice] <- NA
-  r[r%in%water] <- NA
+  r[r%in%snow_ice] <- 12
+  r[r%in%water] <- 13
+  
   
   cat(paste0("Layerizing...",   "\n"), file = logfile, append = TRUE)
   layers <- stack(layerize(r))
+  
   names(layers) <- paste0("X", str_pad(1:nlayers(layers), 2, pad = "0"))
   cat(paste0("Aggregating...",   "\n"), file = logfile, append = TRUE)
-  
   writeRaster(layers, bylayer = TRUE, filename = paste0(temp_path, "/temp_", names(layers)), format = "GTiff", overwrite = TRUE)
   
   removeTmpFiles(h = 0)
@@ -177,10 +180,42 @@ infile <- file.path(temp_path, "roads_raster.tif")
 unlink(file.path(temp_path, "diro_ama.tif"))
 outfile <- file.path(temp_path, "diro_ama.tif")
 proximity_ras(infile, outfile)
+infile <-file.path(raw_path, "Europe", "GRIP4_Region4_vector_shp", "GRIP4_region4.shp")
+roads <- st_read(infile)
 
-t <- mask
-t[which(is.na(mask[]))] <- dat[,1]
+infile <- paste0("/Users/simon/OneDrive - The University of Melbourne/PhD - Large Files/PhD - Raw Data/Global/groads-v1-americas-shp/gROADS-v1-americas.dbf")
 
+roads <- st_read(infile)
+rid <- matrix(c(0:7, "hwy", "pri", "sec", "tert", "loc", "trail", "priv", "unspec"), ncol = 2, nrow = 8)
+rid <- data.frame(rid)
+road_classes <- sort(unique(roads$FCLASS))
+road_classes <- road_classes[-c(5, 3)]
+for (i in road_classes){
+  print(paste0("Writing subset ", i))
+  out <- roads[which(roads$FCLASS == i),]
+  outfile <- file.path(temp_path, paste0("roads_", rid[i+1,2], "_raster.shp"))
+  test <- st_crop(out, mask)
+  #ggplot() +  geom_sf(data = boundary, fill = "darkred") + geom_sf(data = test)
+
+  if(nrow(test) == 0){
+    message("road type not in study area")
+    next}
+  st_write(out, outfile)
+  
+  print(paste0("Rasterizing subset ", i))
+  infile <- outfile
+  outfile <- file.path(temp_path, paste0("roads_", rid[i+1,2], "_raster.tif"))
+  rasterize_shp(infile, outfile, res = res(mask)[1], ext = extent(mask)[c(1,2,3,4)])
+  unlink(infile)
+  
+  print(paste0("Calculating subset ", i))
+  infile <- outfile
+  outfile <- file.path(temp_path, paste0("diro_", rid[i+1,2], "_ama.tif"))
+  proximity_ras(infile, outfile)
+  unlink(infile)
+}
+
+#plot(stack(list.files(temp_path, pattern = "diro", full.names = TRUE)))
 plot(mask)
 nrow(lu)
 #Built-up areas
@@ -273,6 +308,7 @@ length(r) == length(fl)
 
 #Synch NA and output mask
 mask <- readRDS(file.path(data_path, "mask_ama.rds"))
+length(which(!is.na(mask[])))
 
 for(i in 1:length(fl)){
   r <- raster(fl[[i]])
@@ -281,6 +317,7 @@ for(i in 1:length(fl)){
 }
 
 saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
+
 removeTmpFiles(h=0)
 mask <- readRDS(file.path(data_path, "mask_ama.rds"))
 
@@ -298,9 +335,22 @@ for(i in 1:length(fl_lu)){
   lu_mat[,i] <- r
 }
 
+#Getting rid of ice/snow class (class 12) and renaming water to class class 12
 colnames(lu_mat) <- colnames
-saveRDS(lu_mat, file = file.path(data_path, "lu.rds"), compress = TRUE)
 
+ice_cols <- seq(12, 12*8, 13)
+ice_rows <- which(rowSums(lu_mat[,ice_cols])!=0)
+lu_mat <- lu_mat[-ice_rows,-ice_cols]
+mask[inds[ice_rows]] <- NA
+inds <- inds[-ice_rows]
+saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
+
+#rename land use class 13 to land use class 12
+colnames(lu_mat) <- colnames[-seq(13, 13*8, 13)]
+
+saveRDS(lu_mat, file = file.path(data_path, "lu.rds"), compress = TRUE)
+plot(raster("/Users/simon/OneDrive - The University of Melbourne/PhD/chapter2/data/data_ama/temp/diro_loc_ama.tif"))
+inds <- which(!is.na(mask[]))
 fl_cov <- fl[-which(grepl("ts", fl))]
 cov_mat <- matrix(data = NA, nrow = length(inds), ncol = length(fl_cov))
 colnames <- character()
@@ -312,26 +362,5 @@ for(i in 1:length(fl_cov)){
   r <- r[inds]
   cov_mat[,i] <- r
 }
-
-
-data_path <- file.path(getwd(), "data", "data_ama")
-dat <- readRDS(file.path(data_path, "cov.rds")) #dynamic bioclimatic variables
-lu_all <- readRDS(file.path(data_path, "lu.rds"))
-mask <- readRDS(file.path(data_path, "mask_ama.rds")) #country mask
-nrow(lu_all)
-nrow(dat)
-length(mask[which(!is.na(mask[]))])
-
-apply(lu_all, 2, function(x) {length(x[which(x!=0)])})
-
-#mask_cols <- c(grep(pattern = "l04", colnames(lu_all)), grep(pattern = "l13", colnames(lu_all)))
-#mask_rows <- which(rowSums(lu_all[, mask_cols]) > 0) #get rid of lu classes that have less than 10 cells with values.
-#dat <- dat[-mask_rows,]
-# lu_all <- lu_all[-mask_rows, -mask_cols]
-# saveRDS(lu_all, file.path(data_path, "lu.rds"))
-# saveRDS(dat, file.path(data_path, "cov.rds"))
-# mask[which(!is.na(mask[]))[mask_rows]] <- NA
-# saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
-
-colnames(dat) <- colnames
+colnames(cov_mat) <- colnames
 saveRDS(cov_mat, file = file.path(data_path, "cov.rds"), compress = TRUE)

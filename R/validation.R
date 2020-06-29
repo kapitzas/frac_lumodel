@@ -2,6 +2,7 @@ rm(list = ls())
 
 require(raster)
 require(extraDistr)
+require(wrswoR)
 source("./R/functions.R")
 
 #---------------------------#
@@ -11,7 +12,7 @@ source("./R/functions.R")
 # 1.a Load data
 
 data_path <- file.path(getwd(), "data", "data_ama")
-dat <- readRDS(file.path(data_path, "cov.rds")) #dynamic bioclimatic variables
+dat <- readRDS(file.path(data_path, "cov.rds")) #dynamic bioclimatic variables head(dat)
 lu_all <- readRDS(file.path(data_path, "lu.rds"))
 mask <- readRDS(file.path(data_path, "mask_ama.rds")) #country mask
 
@@ -29,32 +30,32 @@ ln <- scale(ln)
 cent <- attr(ln,c("scaled:center"))
 scal <- attr(ln,c("scaled:scale"))
 
+
 # 2.c Correlation analysis and susbetting
 dat <- scale(dat)
 data <- cbind(dat, ln)
 
-preds <- colnames(correlations(data, sub = nrow(data)))
-data <- data[,colnames(data)%in%preds]
+#preds <- colnames(correlations(data, sub = nrow(data)))
+#data <- data[,colnames(data)%in%preds]
+preds <- colnames(data)
 
 #----------------------------#
 #### 2. SUITABILITY MODEL ####
 #----------------------------#
-
 form <- paste(preds, collapse = "+")
-subs_mod <- sample(1:nrow(lu), 20000)
+subs_mod <- sample(1:nrow(lu), 50000)
 suitmod <- suitmodel(form = form, lu = lu[subs_mod,], data = data[subs_mod,], resolution = 10000, model = FALSE, maxit = 10000)
 sm <- predict(suitmod, newdata = data, type = "probs")
 
 #Determine how much we can allocate into cells that are 0
 #Turn lu data into a list of matrices (need to change code so it's stored this way to begin with)
-<<<<<<< HEAD
+
 K <- ncol(lu)
-=======
-K <- 11
->>>>>>> 33992158e3c8db6838da77db2b795be97975c581
+
 ts_inds <- 1:length(ts)
 lu_obs <- list()
 start <- seq(1,ncol(lu_all), by = K)
+
 for(i in 1:length(start)){
   lu_obs[[i]] <- as.data.frame(lu_all[,start[i]:(start[i]+(K-1))])
   names(lu_obs[[i]]) <- paste0("lu", 1:K, ".obs")
@@ -68,11 +69,12 @@ for(i in 2:7){
   }
 }
 
-
 #-----------------#
 #### 3. DEMAND ####
 #-----------------#
 demands <- demand(landuse = lu_all, ts = ts, inds = NULL, k = K, type = "mean")[,1:(K+1)]
+demands[,1+K] <- rep(demands[1,1+K], nrow(demands)) # we assume lu 12 doesn't chnage (it's water courses)
+demands[,-1] <- demands[,-1]/rowSums(demands[,-1]) #rescaling this way will change lu 12 demand again, but it's minimal so negligible.
 
 #---------------------#
 #### 4. SIMULATIONS####
@@ -82,7 +84,8 @@ demands <- demand(landuse = lu_all, ts = ts, inds = NULL, k = K, type = "mean")[
 params <- list(
   max_dev = 1,
   resolution = 1000000,
-  growth = colMeans(ch_ma)
+  growth = colMeans(ch_ma),
+  no_change = c(12)
 )
 
 # 4.a Fully Naive model simulation
@@ -185,7 +188,7 @@ lu_ts <- list()
 lu_suit <- list()
 lu_pred <- matrix(NA, nrow(lu), ncol(lu))
 colnames(lu_pred) <- colnames(lu)
-
+#undebug(allocation)
 #Simulate time series
 for(i in 1:(length(ts)-1)){
   cat(paste0('\n', "Predicting suitability for time step ", i))
@@ -219,7 +222,7 @@ for(i in 1:(length(ts)-1)){
 
 saveRDS(lu_ts, file = file.path("outputs", "preds_full.rds"))
 saveRDS(lu_suit, file = file.path("outputs", "suit_full.rds"))
-
+require()
 
 
 

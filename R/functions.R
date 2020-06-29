@@ -113,7 +113,6 @@ demand <- function(inds = NULL, landuse, ts, path = NULL, k, type = "mean"){
 ####5) Allocate demand####
 ####------------------####
 allocation <- function(lu, sm, params, dmd, ln, constraint, growth){
-  
   #number of land use classes and number of cells
   k <- ncol(lu)
   n <- nrow(lu)
@@ -121,6 +120,8 @@ allocation <- function(lu, sm, params, dmd, ln, constraint, growth){
   resolution <- params$resolution
   max_dev <- params$max_dev
   growth <- params$growth
+  no_change <-  1:K%in%params$no_change
+  
   #Turn intiital land use into integer counts
   p_t0 <- integerify(lu, resolution = resolution)
   
@@ -143,9 +144,30 @@ allocation <- function(lu, sm, params, dmd, ln, constraint, growth){
   if(constraint){
     are_zero <- p_t0 == 0
     inds_list <- list()
+    i <- 1
     for(i in 1:K){
-      inds <- which(are_zero[,i])
-      inds_list[[i]] <- sample(inds, size = length(inds) * ((100-growth[i])/100))
+      inds_zero_all <- which(are_zero[,i]) #all that are 0 should stay 0, except for...
+      inds_zero <- inds_zero_all[which(ln[inds_zero_all,i]!=0)] # a subset of cells near where land use already exists (neigbourhood)
+      size <- length(are_zero[,i]) * ((growth[i])/100) # we want to sample this many from that subset to remain.
+      if(size < length(inds_zero)){
+        keep <- inds_zero[sample_int_rank(length(inds_zero), size = size, prob = sm[inds_zero,i])]
+        inds_list[[i]] <- inds_zero_all[-which(inds_zero_all%in%keep)]
+      }
+      # inds <- which(!is.na(mask[]))
+      # r <- mask
+      # r[inds[inds_zero_all]] <- 2
+      # plot(r)
+      # r[inds[inds_zero]] <- 2
+      # r[inds] <- ln[,1]
+      # r <- mask
+      # r[inds[inds_list[[1]]]] <- 2
+      # plot(r)
+      if(size > length(inds_zero)){
+       leftover <- size - length(inds_zero)
+       inds_leftover <- which(!inds_zero_all%in%inds_zero)
+       keep <- inds_leftover[-sample_int_rank(length(inds_leftover), size = min(c(leftover, length(inds_leftover))), prob = sm[inds_leftover,i])]
+       inds_list[[i]] <- inds_zero_all[-which(inds_zero_all%in%c(inds_zero, keep))]
+      }
     }
   }
   
@@ -184,13 +206,13 @@ allocation <- function(lu, sm, params, dmd, ln, constraint, growth){
     }
     
     if(constraint){
-      for(i in 1:K){
+      for(i in (1:K)){
         p_t1_proposal[inds_list[[i]], i] <- 0
       }
     }
     
     #Turn proposed land use map into integers
-    p_t1_candidate <- integerify(x = p_t1_proposal,  resolution = resolution, no_decrease = NULL, z = p_t1_candidate)
+    p_t1_candidate <- integerify(x = p_t1_proposal,  resolution = resolution, no_decrease = no_change, z = p_t1_candidate)
     
     #ii Calcuate new candidate supply, i.e. the supply of the currently proposed candidate
     supply_t1_candidate <- colSums(p_t1_candidate)
@@ -298,7 +320,7 @@ elasticities2 <- function(ideal_change, elas){
 
 summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
                       conf.interval=.95, .drop=TRUE) {
-  library(plyr)
+  #library(plyr)
   
   # New version of length which can handle NA's: if na.rm==T, don't count them
   length2 <- function (x, na.rm=FALSE) {
@@ -319,7 +341,7 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
   )
   
   # Rename the "mean" column    
-  datac <- rename(datac, c("mean" = measurevar))
+  colnames(datac)[which(colnames(datac) == "mean")] <-  measurevar
   
   datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
   
@@ -334,6 +356,7 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
 
 #Caluclate metrics
 diff_metrics <- function(obs, preds, mask, reference = NULL,...){
+  K <- ncol(lu_obs[[1]])
   preds <- c(obs[1], preds[1:6])
   cont_tables <- list()
   inds <- which(!is.na(mask[]))
