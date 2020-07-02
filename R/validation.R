@@ -73,10 +73,11 @@ for(i in 2:7){
 #-----------------#
 #### 3. DEMAND ####
 #-----------------#
+
 demands <- demand(landuse = lu_all, ts = ts, inds = NULL, k = K, type = "mean")[,1:(K+1)]
 demands[,1+K] <- rep(demands[1,1+K], nrow(demands)) # we assume lu 12 doesn't chnage (it's water courses)
 demands[,-1] <- demands[,-1]/rowSums(demands[,-1]) #rescaling this way will change lu 12 demand again, but it's minimal so negligible.
-
+saveRDS(demands, file = file.path(data_path, "demands.rds"))
 #---------------------#
 #### 4. SIMULATIONS####
 #---------------------#
