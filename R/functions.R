@@ -112,7 +112,8 @@ demand <- function(inds = NULL, landuse, ts, path = NULL, k, type = "mean"){
 ####------------------####
 ####5) Allocate demand####
 ####------------------####
-allocation <- function(lu, sm, params, dmd, ln, constraint, growth){
+allocation <- function(lu, sm, params, dmd, ln, constraint, growth, pa = NULL){
+  
   #number of land use classes and number of cells
   k <- ncol(lu)
   n <- nrow(lu)
@@ -137,6 +138,15 @@ allocation <- function(lu, sm, params, dmd, ln, constraint, growth){
   #Counter
   count <- 0
   
+  if(!is.null(pa)){
+    pa_inds <- which(pa==0)
+    supply_t0_pa <- colSums(p_t0[pa_inds,])
+    nopa_inds <- which(pa==1)
+    p_t0 <- p_t0[nopa_inds,]
+    ln <- ln[nopa_inds,]
+    sm <- sm[nopa_inds,]
+  }
+  
   #First land use map becomes "candidate" on which allocations take place iteratively
   p_t1_candidate <- p_t0
   
@@ -153,24 +163,14 @@ allocation <- function(lu, sm, params, dmd, ln, constraint, growth){
         keep <- inds_zero[sample_int_rank(length(inds_zero), size = size, prob = sm[inds_zero,i])]
         inds_list[[i]] <- inds_zero_all[-which(inds_zero_all%in%keep)]
       }
-      # inds <- which(!is.na(mask[]))
-      # r <- mask
-      # r[inds[inds_zero_all]] <- 2
-      # plot(r)
-      # r[inds[inds_zero]] <- 2
-      # r[inds] <- ln[,1]
-      # r <- mask
-      # r[inds[inds_list[[1]]]] <- 2
-      # plot(r)
       if(size > length(inds_zero)){
-       leftover <- size - length(inds_zero)
-       inds_leftover <- which(!inds_zero_all%in%inds_zero)
-       keep <- inds_leftover[-sample_int_rank(length(inds_leftover), size = min(c(leftover, length(inds_leftover))), prob = sm[inds_leftover,i])]
-       inds_list[[i]] <- inds_zero_all[-which(inds_zero_all%in%c(inds_zero, keep))]
+        leftover <- size - length(inds_zero)
+        inds_leftover <- which(!inds_zero_all%in%inds_zero)
+        keep <- inds_leftover[-sample_int_rank(length(inds_leftover), size = min(c(leftover, length(inds_leftover))), prob = sm[inds_leftover,i])]
+        inds_list[[i]] <- inds_zero_all[-which(inds_zero_all%in%c(inds_zero, keep))]
       }
     }
   }
-  
   
   # Iterative allocation
   while (any(dev_diff > max_dev)) {
@@ -180,6 +180,10 @@ allocation <- function(lu, sm, params, dmd, ln, constraint, growth){
     
     #Demand to be allocated
     demand_change <- demand_t1 - supply_t1_candidate
+    
+    if(!is.null(pa)){
+      demand_change <- demand_change - supply_t0_pa
+    }
     
     #Calculate change factor (a),by how much do we have to multiply the candidate land use proportions to satisfy the modelled suitability.
     ideal_change <- (sm * resolution) / p_t1_candidate
@@ -219,6 +223,9 @@ allocation <- function(lu, sm, params, dmd, ln, constraint, growth){
     
     #Recalculate % deviation of candidate supply from demand
     diff <- abs(demand_t1 - supply_t1_candidate)
+    if(!is.null(pa)){
+      diff <- abs(demand_t1 - (supply_t1_candidate + supply_t0_pa))
+    }
     dev_diff <- diff/demand_t1 * 100
     dev_diff[which(is.na(dev_diff))] <- 0
     
@@ -226,7 +233,13 @@ allocation <- function(lu, sm, params, dmd, ln, constraint, growth){
   }
   
   #When allocations are ready, return result
-  pred_out <- p_t1_candidate/resolution
+  if(!is.null(pa)){
+    pred_out <- matrix(NA, ncol = K, nrow = n)
+    pred_out[nopa_inds,] <- p_t1_candidate/resolution
+    pred_out[pa_inds,] <- lu[pa_inds,]
+  }else{
+    pred_out <- p_t1_candidate/resolution
+  }
   colnames(pred_out) <- colnames(lu)
   pred_out
 }

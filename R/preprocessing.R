@@ -38,11 +38,13 @@ for (i in 1:nlayers(lu)){
 ts <- c(1, 5, 10, 15, 20, 25, 27)
 yrs <- c(1992:2018)
 
-lu <- stack(list.files(temp_path, pattern = "tif", full.names = TRUE))
+lu <- stack(c(list.files(temp_path, pattern = "1.tif", full.names = TRUE), list.files(temp_path, pattern = "lu.ama.tif", full.names = TRUE)))
 names(lu) <- paste0("Y", c(2016:2018, 1992:2015))
 
+lu <- lu[[order(names(lu))]]
+
 mask <- raster("/Users/simon/OneDrive - The University of Melbourne/PhD/chapter2/data/data_ama/temp/ts1992_l01_ama.tif")
-writeRaster(lu, bylayer = TRUE, filename = paste0(temp_path, "/lu_cropped_", names(lu)), format = "GTiff", overwrite = TRUE)
+writeRaster(lu[[ts]], bylayer = TRUE, filename = paste0(temp_path, "/lu_cropped_", names(lu[[ts]])), format = "GTiff", overwrite = TRUE)
 
 lu <- stack(list.files(temp_path, pattern = "lu_cropped", full.names = TRUE))
 
@@ -53,44 +55,33 @@ uniq <- list()
 for(i in 1:nlayers(lu)){
   uniq[[i]] <- unique(lu[[i]][])
 }
+unique(unlist(uniq))
 
-
-crop <- c(10, 11, 12, 20)
-crop_natveg_mosaic <- c(30, 40)
-tree_co <- c(50, 60, 61, 62, 70, 80, 90) #>15% cover
-treeshrub_herb_mosaic <- c(100,110)
-shrub <- c(120,122)
-grass <- c(130)
-sparse <- c(150, 153)
-tree_water <- c(160,170)
-shrub_water <- c(180)
+crop <- c(10, 11, 12, 20, 30)
+crop_mosaic <- 40
+forest <- c(50, 60, 61, 62, 70, 80, 90, 100, 160, 170) #>15% cover
+grass <- c(110, 130)
+wetland <- c(180)
 urban <- c(190)
-bare <- c(200)
+shrub <- c(120, 121,122)
+other <- c(140, 150, 151, 152, 153, 200,201,202,220)
 water <- 210
-snow_ice <- c(220)
-
 
 ts <- c(1, 5, 10, 15, 20, 25, 27)
-yrs <- c(1992:2018)
-
-for(j in ts[-1]){
+yrs <- c(1992:2018)[ts]
+for(j in 1:nlayers(lu)){
   cat(paste0("Time step ", yrs[j], "\n"), file = logfile, append = TRUE)
   cat(paste0("Reclassifying...",   "\n"), file = logfile, append = TRUE)
   r <- lu[[j]]
   r[r%in%crop] <- 1
-  r[r%in%crop_natveg_mosaic] <- 2
-  r[r%in%tree_co] <- 3
-  r[r%in%treeshrub_herb_mosaic] <- 4
+  r[r%in%crop_mosaic] <- 2
+  r[r%in%forest] <- 3
+  r[r%in%grass] <- 4
   r[r%in%shrub] <- 5
-  r[r%in%grass] <- 6
-  r[r%in%sparse] <- 7
-  r[r%in%tree_water] <- 8
-  r[r%in%shrub_water] <- 9
-  r[r%in%urban] <- 10
-  r[r%in%bare] <- 11
-  r[r%in%snow_ice] <- 12
-  r[r%in%water] <- 13
-  
+  r[r%in%wetland] <- 6
+  r[r%in%urban] <- 7
+  r[r%in%other] <- 8
+  r[r%in%water] <- 9
   
   cat(paste0("Layerizing...",   "\n"), file = logfile, append = TRUE)
   layers <- stack(layerize(r))
@@ -134,6 +125,7 @@ bio <- crop(bio, mask)
 bio_names <- names(bio)
 infile <- bio@file@name
 i <- 1
+
 for(i in 1:nlayers(bio)){
   infile <- file.path(temp_path, "temp_bio.tif")
   writeRaster(bio[[i]], infile, format = "GTiff", bylayer = TRUE)
@@ -142,6 +134,26 @@ for(i in 1:nlayers(bio)){
   unlink(infile)
 }
 
+
+##########################
+####4. Protected Areas####
+##########################
+infile <- file.path(raw_path, "Global", "Global Protected Areas", "WDPA_Mar2018-shapefile-polygons.shp")
+outfile <- file.path(temp_path, "PA_cropped.shp")
+crop_shp(infile, outfile, ext = extent(mask))
+test <- sf::st_read(outfile)
+plot(test[which(test$IUCN_CAT%in%c("Ia", "Ib", "II")),], max.plot = 1, add = TRUE)
+
+years <- yrs[ts]
+for (i in 1:length(years)){
+  PA <- test[which(test$IUCN_CAT%in%c("Ia", "Ib", "II") & test$STATUS_YR <= years[i]),]
+  r <- rasterize(PA, mask)
+  out <- mask
+  out[which(!is.na(r[]))] <- 0
+  out <- raster::mask(out, mask)
+  plot(out)
+  writeRaster(out, file.path(temp_path, paste0("PA", years[i], "_ama.tif")), format = "GTiff", overwrite = TRUE)
+}
 
 ####################
 ####4. Elevation####
@@ -294,7 +306,7 @@ reproj_ras(infile, outfile, crs = crs(mask), ext = extent(mask), res = res(mask)
 #####################
 
 #Check that rasters have same extent
-fl <- list.files(temp_path, "ama.tif", full.names = TRUE)
+fl <- list.files(temp_path, "ama.tif$", full.names = TRUE)
 r <- list()
 for(i in 1:length(fl)){
   print(i)
@@ -308,17 +320,16 @@ length(r) == length(fl)
 
 #Synch NA and output mask
 mask <- readRDS(file.path(data_path, "mask_ama.rds"))
-length(which(!is.na(mask[])))
-
 for(i in 1:length(fl)){
   r <- raster(fl[[i]])
   mask <- raster::mask(mask, r)
   print(i)
 }
 
+plot(mask)
+
 saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
 
-removeTmpFiles(h=0)
 mask <- readRDS(file.path(data_path, "mask_ama.rds"))
 
 inds <- which(!is.na(mask[]))
@@ -334,22 +345,11 @@ for(i in 1:length(fl_lu)){
   r <- r[inds]
   lu_mat[,i] <- r
 }
+colnames(lu_mat) <- colnames
+saveRDS(lu_mat, file = file.path(data_path, "lu.rds"), compress = TRUE)
 
 #Getting rid of ice/snow class (class 12) and renaming water to class class 12
-colnames(lu_mat) <- colnames
 
-ice_cols <- seq(12, 12*8, 13)
-ice_rows <- which(rowSums(lu_mat[,ice_cols])!=0)
-lu_mat <- lu_mat[-ice_rows,-ice_cols]
-mask[inds[ice_rows]] <- NA
-inds <- inds[-ice_rows]
-saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
-
-#rename land use class 13 to land use class 12
-colnames(lu_mat) <- colnames[-seq(13, 13*8, 13)]
-
-saveRDS(lu_mat, file = file.path(data_path, "lu.rds"), compress = TRUE)
-plot(raster("/Users/simon/OneDrive - The University of Melbourne/PhD/chapter2/data/data_ama/temp/diro_loc_ama.tif"))
 inds <- which(!is.na(mask[]))
 fl_cov <- fl[-which(grepl("ts", fl))]
 cov_mat <- matrix(data = NA, nrow = length(inds), ncol = length(fl_cov))
@@ -362,5 +362,19 @@ for(i in 1:length(fl_cov)){
   r <- r[inds]
   cov_mat[,i] <- r
 }
+
 colnames(cov_mat) <- colnames
 saveRDS(cov_mat, file = file.path(data_path, "cov.rds"), compress = TRUE)
+# 
+# ice_cols <- seq(9, 8*8, 9)
+# ice_rows <- which(rowSums(lu_mat[,ice_cols])!=0)
+# lu_mat <- lu_mat[-ice_rows,-ice_cols]
+# mask[inds[ice_rows]] <- NA
+# inds <- inds[-ice_rows]
+# saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
+
+#rename land use class 13 to land use class 12
+#colnames(lu_mat) <- colnames[-seq(13, 13*8, 13)]
+
+#plot(raster("/Users/simon/OneDrive - The University of Melbourne/PhD/chapter2/data/data_ama/temp/diro_loc_ama.tif"))
+

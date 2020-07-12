@@ -31,8 +31,10 @@ ln <- scale(ln)
 cent <- attr(ln,c("scaled:center"))
 scal <- attr(ln,c("scaled:scale"))
 
-
 # 2.c Correlation analysis and susbetting
+pa <- dat[,which(grepl("PA", colnames(dat)))]
+pa <- pa[,1]
+dat <- dat[,-which(grepl("PA", colnames(dat)))]
 dat <- scale(dat)
 data <- cbind(dat, ln)
 
@@ -78,6 +80,7 @@ demands <- demand(landuse = lu_all, ts = ts, inds = NULL, k = K, type = "mean")[
 demands[,1+K] <- rep(demands[1,1+K], nrow(demands)) # we assume lu 12 doesn't chnage (it's water courses)
 demands[,-1] <- demands[,-1]/rowSums(demands[,-1]) #rescaling this way will change lu 12 demand again, but it's minimal so negligible.
 saveRDS(demands, file = file.path(data_path, "demands.rds"))
+
 #---------------------#
 #### 4. SIMULATIONS####
 #---------------------#
@@ -87,7 +90,7 @@ params <- list(
   max_dev = 1,
   resolution = 1000000,
   growth = colMeans(ch_ma),
-  no_change = c(12)
+  no_change = c(9)
 )
 
 # 4.a Fully Naive model simulation
@@ -124,12 +127,18 @@ for(i in 1:(length(ts)-1)){
                         sm = sm, 
                         params = params, 
                         dmd = dmd_ts,
-                        constraint = FALSE)
+                        constraint = FALSE,
+                        pa = NULL)
   
   cat('\n')
   lu_ts[[i]] <- lu_out <- lu_pred
   lu_suit[[i]] <- sm
 }
+
+#check that all predictions are within parameters
+all(abs((do.call("rbind", lapply(lu_ts, FUN = colMeans)) - dmd[-1,])/dmd[-1,] * 100) < 1) #Must be TRUE
+inds_pa <- which(pa == 0)
+all(unlist(lapply(lu_ts, FUN = function(x) {all(x[inds_pa,]== lu[inds_pa,])}))) #must be FALSE if pa = NULL
 
 saveRDS(lu_ts, file = file.path("outputs", "preds_naive.rds"))
 saveRDS(lu_suit, file = file.path("outputs", "suit_naive.rds"))
@@ -168,12 +177,18 @@ for(i in 1:(length(ts)-1)){
                         sm = sm, 
                         params = params, 
                         dmd = dmd_ts,
-                        constraint = FALSE)
+                        constraint = FALSE,
+                        pa = NULL)
   
   cat('\n')
   lu_ts[[i]] <- lu_out <- lu_pred
   lu_suit[[i]] <- sm
 }
+
+#check that all predictions are within parameters
+all(abs((do.call("rbind", lapply(lu_ts, FUN = colMeans)) - dmd[-1,])/dmd[-1,] * 100) < 1) #Must be TRUE
+inds_pa <- which(pa == 0)
+all(unlist(lapply(lu_ts, FUN = function(x) {all(x[inds_pa,]== lu[inds_pa,])}))) #must be FALSE if pa = NULL
 
 saveRDS(lu_ts, file = file.path("outputs", "preds_semi.rds"))
 saveRDS(lu_suit, file = file.path("outputs", "suit_semi.rds"))
@@ -215,16 +230,21 @@ for(i in 1:(length(ts)-1)){
                         sm = sm, 
                         params = params, 
                         dmd = dmd_ts,
-                        constraint = TRUE)
+                        constraint = TRUE,
+                        pa = pa)
   
   cat('\n')
   lu_ts[[i]] <- lu_out <- lu_pred
   lu_suit[[i]] <- sm
 }
 
+all(abs((do.call("rbind", lapply(lu_ts, FUN = colMeans)) - dmd[-1,])/dmd[-1,] * 100) < 1) #Must be TRUE
+inds_pa <- which(pa == 0)
+all(unlist(lapply(lu_ts, FUN = function(x) {all(x[inds_pa,]== lu[inds_pa,])}))) #must be TRUE if pa = NULL
+
 saveRDS(lu_ts, file = file.path("outputs", "preds_full.rds"))
 saveRDS(lu_suit, file = file.path("outputs", "suit_full.rds"))
-require()
+
 
 
 

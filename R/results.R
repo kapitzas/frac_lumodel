@@ -30,7 +30,7 @@ lu_all <- readRDS(file.path(data_path, "lu.rds"))
 
 lu_all
 #Calculate RMSE
-K <- 12
+K <- 9
 ts_inds <- 1:length(ts)
 lu_obs <- list()
 start <- seq(1,ncol(lu_all), by = K)
@@ -126,7 +126,7 @@ fig3a <- fig3a + geom_point(shape = 16, size = 2) +
   geom_hline(yintercept = 0, linetype="dashed") + 
   theme_bw() + 
   scale_x_continuous(breaks = seq(5, 27, by = 5)) + 
-  scale_y_continuous(limits=c(-0.06, 0.03)) +
+  scale_y_continuous(limits=c(-0.08, 0.03)) +
   ylab("RMSE difference to null") + 
   theme(panel.border = element_blank(), 
         panel.grid.major = element_blank(),
@@ -161,9 +161,9 @@ t1 <- do.call("rbind", lapply(aucs, FUN = function(x)
 t1 <- as.data.frame(t1)
 
 t1$lu <- as.factor(rep(1:K, 4))
-t1$model <- factor(rep(c("null", "naive", "semi", "full"), each = 12), levels = c("null", "naive", "semi", "full"))
+t1$model <- factor(rep(c("null", "naive", "semi", "full"), each = K), levels = c("null", "naive", "semi", "full"))
 t1 <- t1 %>% gather(key = "timestep", value = "diff", -lu, - model)
-t1$timestep <- as.factor(rep(c(5, 10, 15, 20, 25, 27), each = 48))
+t1$timestep <- as.factor(rep(c(5, 10, 15, 20, 25, 27), each = K * 4))
 
 t1$model <- factor(t1$model, c("full", "semi", "naive", "null"))
 fig3b <- ggplot(t1, aes(x = timestep, y = diff, colour = model))
@@ -190,6 +190,7 @@ dom_full <- lapply(preds_full, FUN = function(x) {as.numeric(apply(x, 1, FUN =  
 inds <- which(!is.na(mask[]))
 
 agrexp_hloss <- list()
+i <- 1
 for (i in 1:length(preds_full)){
   
   r <- mask
@@ -201,31 +202,65 @@ for (i in 1:length(preds_full)){
   
   crop1_obs <- diff_obs[,c(1)] #cropland expansion per cell
   crop2_obs <- diff_obs[,c(2)] #cropland expansion per cell
+  pasture_obs <- diff_obs[,c(4,5)] #pasture expansion per cell
+  
   nat1_obs <- diff_obs[,c(3)]
-  nat2_obs <- rowSums(diff_obs[,c(4,5, 8, 9)])
+  nat2_obs <- rowSums(diff_obs[,c(6,8)])
   
   crop1_full <- diff_full[,c(1)] #cropland expansion per cell
   crop2_full <- diff_full[,c(2)] #cropland expansion per cell
+  pasture_full <- diff_full[,c(4,5)] #pasture expansion per cell
+  
   nat1_full <- diff_full[,c(3)]
-  nat2_full <- rowSums(diff_full[,c(4,5, 8, 9)])
+  nat2_full <- rowSums(diff_full[,c(6,8)])
   
   
-  agrexp_full <- agrexp_obs <- hloss_full <- hloss_obs <- r
+  pastureexp_obs <- pastureexp_full <- agrexp_full <- agrexp_obs <- hloss_full <- hloss_obs <- r
+  
+  #PASTURE EXPANSION
+  #OBSERVED
+  #Pasture cuts into forest
+  pastureexp_obs[inds[which(pasture_obs > 0 & rowSums(cbind(nat1_obs,nat2_obs)) < 0 & nat1_obs < nat2_obs)]] <- 1
+  
+  #Pasture cuts into shrub/other
+  pastureexp_obs[inds[which(pasture_obs > 0 & rowSums(cbind(nat1_obs,nat2_obs)) < 0 & nat2_obs < nat1_obs)]] <- 2
   
   #PREDICTED
-  #Cropland dominates increase
-  agrexp_full[inds[which(rowSums(cbind(crop1_full, crop2_full)) > 0 & crop1_full > crop2_full)]] <- 1
+  #Pasture cuts into forest
+  pastureexp_full[inds[which(pasture_full > 0 & rowSums(cbind(nat1_full,nat2_full)) < 0 & nat1_full < nat2_full)]] <- 1
   
-  #Cropland mosaic dominates increase
-  agrexp_full[inds[which(sum(crop1_full, crop2_full) > 0 & crop2_full > crop1_full)]] <- 2
+  #Pasture cuts into shrub/other
+  pastureexp_full[inds[which(pasture_full > 0 & rowSums(cbind(nat1_full,nat2_full)) < 0 & nat2_full < nat1_full)]] <- 2
   
-  #OBSERVED
-  #Cropland dominates increase
-  agrexp_obs[inds[which(rowSums(cbind(crop1_full, crop2_full)) > 0 & crop1_obs > crop2_obs)]] <- 1
+  #CROPLAND EXPANSION
+  #PREDICTED
+  #cuts into forest
+  agrexp_full[inds[which(rowSums(cbind(crop1_full, crop2_full)) > 0 & rowSums(cbind(nat1_full,nat2_full)) < 0 & nat1_full < nat2_full)]] <- 1
   
-  #Cropland mosaic dominates increase
-  agrexp_obs[inds[which(rowSums(cbind(crop1_full, crop2_full)) > 0 & crop2_obs > crop1_obs)]] <- 2
+  #cuts into shrub/other
+  agrexp_full[inds[which(rowSums(cbind(crop1_full, crop2_full)) > 0 & rowSums(cbind(nat1_full,nat2_full)) < 0 & nat2_full < nat1_full)]] <- 2
   
+  #cuts into forest
+  agrexp_obs[inds[which(rowSums(cbind(crop1_obs, crop2_obs)) > 0 & rowSums(cbind(nat1_obs,nat2_obs)) < 0 & nat1_obs < nat2_obs)]] <- 1
+  
+  #cuts into shrub/other
+  agrexp_obs[inds[which(rowSums(cbind(crop1_obs, crop2_obs)) > 0 & rowSums(cbind(nat1_obs,nat2_obs)) < 0 & nat2_obs < nat1_obs)]] <- 2
+  
+  # #PREDICTED
+  # #Cropland dominates increase
+  # agrexp_full[inds[which(rowSums(cbind(crop1_full, crop2_full)) > 0 & crop1_full > crop2_full)]] <- 1
+  # 
+  # #Cropland mosaic dominates increase
+  # agrexp_full[inds[which(sum(crop1_full, crop2_full) > 0 & crop2_full > crop1_full)]] <- 2
+  # 
+  # #OBSERVED
+  # #Cropland dominates increase
+  # agrexp_obs[inds[which(rowSums(cbind(crop1_full, crop2_full)) > 0 & crop1_obs > crop2_obs)]] <- 1
+  # 
+  # #Cropland mosaic dominates increase
+  # agrexp_obs[inds[which(rowSums(cbind(crop1_full, crop2_full)) > 0 & crop2_obs > crop1_obs)]] <- 2
+  
+  #HABITAT LOSS
   #PREDICTED
   #Forest loss dominates habitat loss
   hloss_full[inds[which(rowSums(cbind(nat2_full, nat1_full)) < 0 & nat1_full < nat2_full)]] <- 1
@@ -233,14 +268,14 @@ for (i in 1:length(preds_full)){
   #Other habitat loss dominates habitat loss
   hloss_full[inds[which(rowSums(cbind(nat2_full, nat1_full)) < 0 & nat2_full < nat1_full)]] <- 2
   
-  #PREDICTED
+  #OBSERVED
   #Forest loss dominates habitat loss
   hloss_obs[inds[which(rowSums(cbind(nat2_full, nat1_full)) < 0 & nat1_obs < nat2_obs)]] <- 1
   
   #Other habitat loss dominates habitat loss
   hloss_obs[inds[which(rowSums(cbind(nat2_full, nat1_full)) < 0 & nat2_obs < nat1_obs)]] <- 2
   
-  agrexp_hloss[[i]] <- list(stack(agrexp_obs, agrexp_full), stack(hloss_obs, hloss_full))
+  agrexp_hloss[[i]] <- list(stack(agrexp_obs, agrexp_full), stack(pastureexp_obs, pastureexp_full))
 }
 
 agrexp_hloss2 <- list(list(), list())
@@ -248,12 +283,12 @@ for(i in 1:6){
   agrexp_hloss2[[1]][[i]] <- agrexp_hloss[[i]][[1]]
   agrexp_hloss2[[2]][[i]] <- agrexp_hloss[[i]][[2]]
 }
-agrexp_hloss <- agrexp_hloss2
+
 diff_list <- list()
 figs4 <- list()
 j <- 1
 for(j in 1:2){
-  cs_list <- agrexp_hloss[[j]]
+  cs_list <- agrexp_hloss2[[j]]
   diff <- matrix(rep(NA, 30), ncol = 5, nrow = 6)
   for(i in 1:length(cs_list)){
     ct <- crosstabm(cs_list[[i]][[1]], cs_list[[i]][[2]], percent = TRUE)
@@ -263,19 +298,19 @@ for(j in 1:2){
     diff[i,4] <- overallAllocD(ct)
     diff[i,5] <- overallDiff(ct)
   }
-  metrics <- c("Shift", "Exchange", "Quantity")
   diff_metrics <- as.data.frame(diff)
-  colnames(diff_metrics) <- c("Exchange", "Shift", "Quantity", "Allocation", "Overall Difference")
+  colnames(diff_metrics) <- c("Exchange", "Shift", "Quantity", "Allocation", "Overall")
+  metrics <- c("Allocation", "Quantity")
   diff_metrics$timestep <- ts
   diff_metrics$xpos <- as.factor(rownames(diff_metrics))
   diff_metrics %>%
     gather(value = "value", key = "difference", metrics) %>%
     mutate(difference = factor(difference, levels = metrics)) %>%
-    arrange(value) %>%
     ggplot(aes(x = xpos, y = value)) +
-    geom_bar(stat = "identity", aes(fill = difference)) +
+    geom_bar(. %>% filter(difference %in% metrics), stat = "identity", mapping = aes(fill = difference)) +
     scale_fill_manual(values = plasma(3, begin = 0.2, end = 0.8, direction = 1)) +
     scale_x_discrete(waiver(), labels= as.character(ts)) +
+    scale_y_continuous(position = "left", limits = c(0,22)) + 
     xlab("Year") +
     ylab("Difference [%]") +
     theme(
@@ -285,22 +320,24 @@ for(j in 1:2){
       plot.background = element_rect(fill = "transparent",colour = NA),
       axis.line = element_blank(),
       axis.ticks = element_blank(),
+      axis.text.x = if(j==1) {element_blank()} else if(j==2) element_text(),
       axis.title.x = if(j==1) {element_blank()} else if(j==2) element_text(),
+      axis.title.y = if(j==1) {element_text(colour = "transparent")} else if(j==2) {element_text(hjust = 1.5)},
       legend.title = element_blank(),
       legend.background = element_rect(fill = "transparent",colour = NA),
       legend.position = if(j==1) {"none"} else if(j==2) c(0.7, 0.9),
-      legend.direction="vertical"
+      legend.direction="vertical",
+      plot.margin = margin(t=0, r=10, b=10, l=10)
     ) -> 
     figs4[[j]]
 }
 
 
-str(figs4[[1]])
 boundary <- readOGR("/Users/simon/OneDrive - The University of Melbourne/PhD - Large Files/PhD - Raw Data/Global/Amazon boundaries/Lim_Biogeografico.shp")
 boundary <- gSimplify(boundary, tol = 0.05)
 
 #Make levelplots of change rasters
-s <- agrexp_hloss[[6]]
+s <- stack(agrexp_hloss[[6]])
 
 maps <- list()
 for (i in 1: nlayers(s)){
@@ -337,10 +374,10 @@ legends_fig3 <- list()
 for(i in 1:2){
   
   if(i == 1){
-    lab <- c("no increase", "dominated by cropland increase", "dominated by cropland mosaic increase")
+    lab <- c("no increase", "causing forest loss", "causing other habitat loss")
   }
   if(i == 2){
-    lab <- c("no decrease", "dominated by forest loss", "dominated by other natural habitat loss")
+    lab <- c("no increase", "causing forest loss", "causing other habitat loss")
   }
   
   leg_data <- tibble(label = lab)
@@ -351,13 +388,14 @@ for(i in 1:2){
     scale_fill_manual(values= plasma(3, begin = 0.2, end = 0.8, direction = -1)) + 
     theme(title = element_blank(), 
           legend.position="bottom", 
-          legend.margin=margin(t=-0, r=-0, b=-0, l=-0, unit="cm"),
+          legend.margin=margin(t=-0, r=-0, b=10, l=-0, unit="pt"),
           legend.text = element_text(size = 8, colour = "black"))
   legends_fig3[[i]] <- cowplot::get_legend(my_hist)
 }
 
 png(file.path(figure_path, "figure4.png"), height = 140, width = 200, units = "mm", res = 1000)
 plot_grid(
+  plot_grid(figs4[[1]], figs4[[2]], ncol = 1, labels= c("a)", "b)"), hjust = c(-1.5,-1.5), vjust = c(1.5, 0.5)),
   plot_grid(
     plot_grid(maps[[1]], maps[[2]], ncol = 2), 
     legends_fig3[[1]], 
@@ -365,18 +403,16 @@ plot_grid(
     legends_fig3[[2]], nrow = 4, 
     
     rel_heights = c(1/1.25, 1/12, 1/1.25, 1/12), 
-    labels = c("a)", "", "b)", "")), 
-  plot_grid(figs4[[1]], figs4[[2]], ncol = 1),
-  rel_widths = c(3, 1)
+    labels = c("c)", "", "d)", ""), vjust = c(1.5,1.5, 0.5, 1.5)), 
+  rel_widths = c(1,3)
 )
-
 dev.off()
 
 r <- mask
 diff2 <- diff1 <- r
-diff1[inds] <- rowSums(cbind(crop1_obs, crop2_obs))
+diff1[inds] <- rowSums(cbind(crop1_obs, crop2_obs, pasture_obs))
 diff2[inds] <- rowSums(cbind(nat1_obs, nat2_obs))
-diffstack <- stack(stack(diff1, diff2))
+diffstack <- stack(stack(diff2, diff1))
 mind <- min(getValues(diffstack)[inds,])
 maxd <- max(getValues(diffstack)[inds,])
 maps2 <- list()
@@ -397,10 +433,10 @@ for(i in 1:nlayers(diffstack)){
                  scales=list(draw=FALSE),
                  col.regions= plasma(30, begin = 0.2, end = 0.8)) +
     layer(sp.polygons(boundary, lwd=2))
-  if(i == 1){
-    l <- l + layer(panel.text(-58, 9, labels = "Cropland growth", cex = 0.7, adj = 0, font = 2))
-  }
   if(i == 2){
+    l <- l + layer(panel.text(-58, 9, labels = "Agr. expansion", cex = 0.7, adj = 0, font = 2))
+  }
+  if(i == 1){
     l <- l + layer(panel.text(-58, 9, labels = "Habitat loss", cex = 0.7, adj = 0, font = 2))
   }
   maps2[[i]] <- l
@@ -451,19 +487,30 @@ fig2a <- ggplot(data = sa) +
 
 demands <- readRDS("/Users/simon/OneDrive - The University of Melbourne/PhD/chapter2/data/data_ama/demands.rds")
 dmd <- demands[c(1,27),-1]
+length(which(!is.na(mask[])))
+nrow(dat)
+# r[r%in%crop] <- 1
+# r[r%in%crop_mosaic] <- 2
+# r[r%in%forest] <- 3
+# r[r%in%grass] <- 4
+# r[r%in%shrub] <- 5
+# r[r%in%wetland] <- 6
+# r[r%in%urban] <- 7
+# r[r%in%other] <- 8
+# r[r%in%water] <- 9
 
-dmd_plotdata <- cbind(dmd[,c(1:3)], rowSums(dmd[,c(4:7)]), rowSums(dmd[,c(8:9)]), dmd[,10], rowSums(dmd[,c(11,12)]))
+dmd_plotdata <- cbind(rowSums(dmd[,c(1:2)]),rowSums(dmd[,c(4:5)]), dmd[,3], rowSums(dmd[,c(6,8)]))
 dmd_plotdata <- as.data.frame(rbind(dmd_plotdata, diff(dmd_plotdata))) * 100
-classes <- c("cropland", "crop/nat mosaic", "forest", "other nat veg", "water veg", "urban", "barren/water")
+classes <- c("Cropland",  "Pasture (grass/shrub)", "Forest", "Other habitat")
 colnames(dmd_plotdata) <- classes
 
-dmd_annotate <- round(dmd_plotdata[-3,], 3) * 100
+dmd_annotate <- round(dmd_plotdata[-3,], 3)
 dmd_annotate[1,] <- paste0(dmd_annotate[1,], "%")
 dmd_annotate[2,] <- paste0(dmd_annotate[2,], "%")
 
 dmd_plotdata <- cbind(dmd_plotdata, "type" = c("1992", "2018", "difference"))
 fig2b <- dmd_plotdata %>% 
-  gather(key = "class", value = "change", -8) %>% 
+  gather(key = "class", value = "change", -ncol(.)) %>% 
   mutate(class = factor(class, levels = classes)) %>%
   arrange(type) %>%
   mutate(v1992 = paste(round(change[which(type==1992)],2), "%")) %>%
