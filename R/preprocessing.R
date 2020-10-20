@@ -1,21 +1,25 @@
 gc()
-
+rm(list = ls())
 require(devtools)
 require(WorldClimTiles)
 require(rgdal)
 require(gdaltools)
 require(raster)
 require(stringr)
-
-data_path <- file.path(getwd(), "data", "data_ama")
-temp_path <- file.path(getwd(), "data" , "data_ama", "temp")
+require(sf)
+data_path <- file.path(getwd(), "data", "data_ama_1k")
+temp_path <- file.path(data_path, "temp")
 raw_path <-  file.path(path.expand("~"), "OneDrive - The University of Melbourne", "PhD - Large Files", "PhD - Raw Data")
 
-# lu2 <- list.files(raw_path, pattern = "nc", full.names = TRUE)
-# 
-# for (i in 1:length(lu2)){
-# system(paste0("gdalwarp -of Gtiff -co COMPRESS=LZW -co TILED=YES -ot Byte -te -180.0000000 -90.0000000 180.0000000 90.0000000 -tr 0.002777777777778 0.002777777777778 -t_srs EPSG:4326 NETCDF:", paste0("'", lu2[[i]], "'"), ":lccs_class ",  paste0("'", gsub(".nc", ".tif", lu2[[i]]), "'")))
-# }
+#lu2 <- list.files(raw_path, pattern = "nc", full.names = TRUE)
+
+#for (i in 1:length(lu2)){
+#system(paste0("gdalwarp -of Gtiff -co COMPRESS=LZW -co TILED=YES -ot Byte -te -180.0000000 -90.0000000 #180.0000000 90.0000000 -tr 0.002777777777778 0.002777777777778 -t_srs EPSG:4326 NETCDF:", paste0("'", #lu2[[i]], "'"), ":lccs_class ",  paste0("'", gsub(".nc", ".tif", lu2[[i]]), "'")))
+#}
+
+##########################
+#### 1.) Land use data####
+##########################
 
 lu <- stack(file.path(raw_path, "Global", "CLC maps", "ESACCI-LC-L4-LCCS-Map-300m-P1Y-1992_2015-v2.0.7.tif"))
 boundary <- readOGR("/Users/simon/OneDrive - The University of Melbourne/PhD - Large Files/PhD - Raw Data/Global/Amazon boundaries/Lim_Biogeografico.shp")
@@ -23,6 +27,11 @@ boundary <- readOGR("/Users/simon/OneDrive - The University of Melbourne/PhD - L
 input <- file.path(raw_path, "Global", "CLC maps", "ESACCI-LC-L4-LCCS-Map-300m-P1Y-1992_2015-v2.0.7.tif")
 
 out <- file.path(temp_path, "lu.ama.tif")
+
+if(!dir.exists(temp_path)){
+  dir.create(temp_path)
+}
+  
 reproj_ras(input, out, crs = crs(lu), res = res(lu), method = "near", ext = extent(boundary))
 
 #saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
@@ -95,7 +104,7 @@ for(j in 1:nlayers(lu)){
   
   for(l in 1:length(files)){
     out <- file.path(temp_path, paste0(paste0("ts", str_pad(yrs[j], 2, pad = "0")), "_", paste0("l", str_pad(l, 2, pad = "0")), "_ama.tif"))
-    reproj_ras(files[l], out, crs = crs(mask), res = 0.0833333, method = "average", ext = extent(mask))
+    reproj_ras(files[l], out, crs = crs(mask), res = 0.00833333, method = "average", ext = extent(mask))
   }
   unlink(files)
 }
@@ -103,37 +112,28 @@ for(j in 1:nlayers(lu)){
 unlink(file.path(temp_path, "lu.ama.tif"))
 
 ####################
-###PREPROCESSING####
+#### 2. MASK #######
 ####################
-mask <- raster("~/OneDrive - The University of Melbourne/PhD/chapter2/data/data_ama/temp/ts1992_l01_ama.tif")
+
+mask <- raster(file.path(temp_path, "ts1992_l01_ama.tif"))
 mask[!is.na(mask[])] <- 1
 mask <-raster::mask(mask, boundary)
 plot(mask)
 saveRDS(readAll(mask), file.path(data_path, "mask_ama.rds"))
 
-##########################
-#### 1.) Land use data####
-##########################
-#unlink(list.files(temp_path, full.names = TRUE), recursive = TRUE)
+####################
+#### 3. BIO ########
+####################
 
+biofiles <- list.files(file.path(raw_path, "Global", "wc21_30s_bio"), full.names = TRUE)
 mask <- readRDS(file.path(data_path, "mask_ama.rds"))
-tiles <- tile_name(mask, "worldclim")
-bio <- tile_get(tiles = tiles, var = "bio", path = temp_path)
-bio <- tile_merge(bio)
-bio <- crop(bio, mask)
+bio_names <- paste0("bio", c(1, 10:19, 2:9))
 
-bio_names <- names(bio)
-infile <- bio@file@name
-i <- 1
-
-for(i in 1:nlayers(bio)){
-  infile <- file.path(temp_path, "temp_bio.tif")
-  writeRaster(bio[[i]], infile, format = "GTiff", bylayer = TRUE)
+for(i in 1:length(biofiles)){
+  infile <- biofiles[[i]]
   outfile <- file.path(temp_path, paste0(bio_names[i], "_ama.tif"))
   reproj_ras(infile, outfile, crs = crs(mask), ext = extent(mask)[c(1,2,3,4)], res = res(mask), method = "bilinear")
-  unlink(infile)
 }
-
 
 ##########################
 ####4. Protected Areas####
@@ -142,7 +142,7 @@ infile <- file.path(raw_path, "Global", "Global Protected Areas", "WDPA_Mar2018-
 outfile <- file.path(temp_path, "PA_cropped.shp")
 crop_shp(infile, outfile, ext = extent(mask))
 test <- sf::st_read(outfile)
-plot(test[which(test$IUCN_CAT%in%c("Ia", "Ib", "II")),], max.plot = 1, add = TRUE)
+#plot(test[which(test$IUCN_CAT%in%c("Ia", "Ib", "II")),], max.plot = 1, add = TRUE)
 
 years <- yrs[ts]
 for (i in 1:length(years)){
@@ -151,7 +151,7 @@ for (i in 1:length(years)){
   out <- mask
   out[which(!is.na(r[]))] <- 0
   out <- raster::mask(out, mask)
-  plot(out)
+  
   writeRaster(out, file.path(temp_path, paste0("PA", years[i], "_ama.tif")), format = "GTiff", overwrite = TRUE)
 }
 
@@ -160,12 +160,8 @@ for (i in 1:length(years)){
 ####################
 
 mask <- readRDS(file.path(data_path, "mask_ama.rds"))
-infile <-file.path(raw_path, "Global", "topo30", "topo30.grd")
+infile <-file.path(raw_path, "Global", "wc2.1_30s_elev.tif")
 r <- raster(infile)
-r <- rotate(r)
-
-writeRaster(r, gsub("grd", "tif", infile), driver = "GTiff")
-infile <- gsub("grd", "tif", infile)
 
 unlink(file.path(temp_path, "srtm_ama.tif"))
 outfile <- file.path(temp_path,  "srtm_ama.tif")
@@ -183,19 +179,17 @@ writeRaster(roughness, filename = file.path(temp_path, paste0("roughness_ama.tif
 ###########################
 
 #Roads
-infile <- paste0("/Users/simon/OneDrive - The University of Melbourne/PhD - Large Files/PhD - Raw Data/Global/groads-v1-americas-shp/gROADS-v1-americas.shp")
-unlink(file.path(temp_path, "roads_raster.tif"))
-outfile <- file.path(temp_path, "roads_raster.tif")
-rasterize_shp(infile, outfile, res = res(mask)[1], ext = extent(mask)[c(1,2,3,4)])
+# infile <- paste0(file.path(raw_path, "Global", "groads-v1-americas-shp/gROADS-v1-americas.shp"))
+# unlink(file.path(temp_path, "roads_raster.tif"))
+# outfile <- file.path(temp_path, "roads_raster.tif")
+# rasterize_shp(infile, outfile, res = res(mask)[1], ext = extent(mask)[c(1,2,3,4)])
+# 
+# infile <- file.path(temp_path, "roads_raster.tif")
+# unlink(file.path(temp_path, "diro_ama.tif"))
+# outfile <- file.path(temp_path, "diro_ama.tif")
+# proximity_ras(infile, outfile)
 
-infile <- file.path(temp_path, "roads_raster.tif")
-unlink(file.path(temp_path, "diro_ama.tif"))
-outfile <- file.path(temp_path, "diro_ama.tif")
-proximity_ras(infile, outfile)
-infile <-file.path(raw_path, "Europe", "GRIP4_Region4_vector_shp", "GRIP4_region4.shp")
-roads <- st_read(infile)
-
-infile <- paste0("/Users/simon/OneDrive - The University of Melbourne/PhD - Large Files/PhD - Raw Data/Global/groads-v1-americas-shp/gROADS-v1-americas.dbf")
+infile <- paste0(file.path(raw_path, "Global", "groads-v1-americas-shp/gROADS-v1-americas.dbf"))
 
 roads <- st_read(infile)
 rid <- matrix(c(0:7, "hwy", "pri", "sec", "tert", "loc", "trail", "priv", "unspec"), ncol = 2, nrow = 8)
@@ -227,9 +221,6 @@ for (i in road_classes){
   unlink(infile)
 }
 
-#plot(stack(list.files(temp_path, pattern = "diro", full.names = TRUE)))
-plot(mask)
-nrow(lu)
 #Built-up areas
 infile <- file.path(raw_path, "Global", "Global Built up areas", "bltupa.shp")
 unlink(file.path(temp_path, "builtup_raster.tif"))
@@ -296,10 +287,10 @@ reproj_ras(infile, outfile, crs = crs(mask), ext = extent(mask), res = res(mask)
 ####7. Population Density####
 #############################
 
-infile <- file.path(raw_path, "Global", "Pop_density", "gluds00ag.bil")
-unlink(file.path(temp_path, "popdens_ama.tif"))
-outfile <- file.path(temp_path,  "popdens_ama.tif")
-reproj_ras(infile, outfile, crs = crs(mask), ext = extent(mask), res = res(mask), method = "near")
+#infile <- file.path(raw_path, "Global", "Pop_density", "gluds00ag.bil")
+#unlink(file.path(temp_path, "popdens_ama.tif"))
+#outfile <- file.path(temp_path,  "popdens_ama.tif")
+#reproj_ras(infile, outfile, crs = crs(mask), ext = extent(mask), res = res(mask), method = "near")
 
 #####################
 ####8. Processing####
@@ -316,7 +307,7 @@ for(i in 1:length(fl)){
     break
   }
 }
-length(r) == length(fl)
+
 
 #Synch NA and output mask
 mask <- readRDS(file.path(data_path, "mask_ama.rds"))
@@ -345,11 +336,12 @@ for(i in 1:length(fl_lu)){
   r <- r[inds]
   lu_mat[,i] <- r
 }
+
 colnames(lu_mat) <- colnames
-saveRDS(lu_mat, file = file.path(data_path, "lu.rds"), compress = TRUE)
+#saveRDS(lu_mat, file = file.path(data_path, "lu.rds"), compress = TRUE)
 
 #Getting rid of ice/snow class (class 12) and renaming water to class class 12
-
+rm(lu_mat)
 inds <- which(!is.na(mask[]))
 fl_cov <- fl[-which(grepl("ts", fl))]
 cov_mat <- matrix(data = NA, nrow = length(inds), ncol = length(fl_cov))
@@ -365,6 +357,7 @@ for(i in 1:length(fl_cov)){
 
 colnames(cov_mat) <- colnames
 saveRDS(cov_mat, file = file.path(data_path, "cov.rds"), compress = TRUE)
+
 # 
 # ice_cols <- seq(9, 8*8, 9)
 # ice_rows <- which(rowSums(lu_mat[,ice_cols])!=0)

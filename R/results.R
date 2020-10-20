@@ -1,4 +1,4 @@
-#rm(list = ls())
+rm(list = ls())
 
 require(raster)
 require(matrixStats)
@@ -25,10 +25,9 @@ suit_semi <- readRDS(file.path("outputs", "suit_semi.rds"))
 suit_naive <- readRDS(file.path("outputs", "suit_naive.rds"))
 
 mask <- readRDS(file.path(data_path, "mask_ama.rds")) #country mask
-
+boundary <- readOGR("/Users/simon/OneDrive - The University of Melbourne/PhD/chapter2/data/bnd_ama/Lim_Biogeografico.shp")
 lu_all <- readRDS(file.path(data_path, "lu.rds"))
 
-lu_all
 #Calculate RMSE
 K <- 9
 ts_inds <- 1:length(ts)
@@ -106,35 +105,44 @@ data_f1 <- cbind(tibble(
   #filter(null_mae != 0) %>%
   #mutate("category" = cut(null_rmse, breaks=3))
   mutate("category" = cut(max.diff, breaks=c(-Inf, 0.005, 0.3, 0.5, Inf), 
-                          labels=c("[0, 0.005)", "[0.005, 0.3)", "[0.3, 0.5)", "[0.5, inf)")))
+                          labels=c("less than 0.5% change", "0.5% - 30% change", "30% - 50% change", "more than 50% change")))
 
 
-
+#### FIG 3 ####
 
 data_f1 <- data_f1 %>% gather(key = "model", value = "diffs", "full", "semi", "naive")
-
 data_aggr <- summarySE(data_f1, measurevar = "diffs", groupvars = c("Year", "category", "model"), conf.interval=0.95)
-
-# Use a consistent y range
 data_aggr$model <- factor(data_aggr$model, c("full", "semi", "naive"))
+str(data_aggr)
+# Calculate fraction of cells in smallest category for results section
+data_aggr %>% filter(category == "less than 0.5% change", model == "full") %>% dplyr::select(N) %>% sum -> cat0
+data_aggr %>% filter(model == "full") %>% dplyr::select(N) %>% sum -> catall
+cat0/catall * 100
+
+which(data_aggr$category == "more than 50% change")
+str(data_aggr$category)
+data_aggr[,c(5:8)] <- data_aggr[,c(5:8)] * 100
+# Use a consistent y range
 figure_path <- "/Users/simon/OneDrive - The University of Melbourne/PhD/writing/papers/MEE/figures/"
 fig3a <- ggplot(data_aggr, aes(x=Year, y=diffs, colour=model)) + scale_colour_viridis_d(option = "plasma", begin = 0.2, end = 0.6)
-fig3a <- fig3a + geom_point(shape = 16, size = 2) + 
+fig3a <- fig3a + geom_point(shape = 16, size = 1.5) + 
   geom_errorbar(aes(ymin=diffs-ci, ymax=diffs+ci), width=.4) + 
-  geom_line() + 
-  facet_wrap(~category, scales='free') + 
+  geom_line(size=0.5) + 
+  facet_wrap(~category) + 
   geom_hline(yintercept = 0, linetype="dashed") + 
   theme_bw() + 
   scale_x_continuous(breaks = seq(5, 27, by = 5)) + 
-  scale_y_continuous(limits=c(-0.08, 0.03)) +
-  ylab("RMSE difference to null") + 
+  scale_y_continuous(limits=c(-0.08 * 100, 0.03 * 100)) +
+  ylab("RMSE diff x 100") + 
+  xlab(element_blank()) + 
   theme(panel.border = element_blank(), 
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(), 
         axis.line = element_line(colour = "black"),
-        strip.background = element_rect(fill="white", colour = "white"),
+        strip.background = element_rect(fill="transparent", colour = "transparent"),
         strip.text = element_text(size=8, colour="black"), 
-        #legend.position = c(.5, .65), 
+        legend.position = c(.5, .65), 
+        legend.direction = "horizontal",
         legend.text = element_text(size = 8, colour = "black"),
         legend.title =  element_blank())
 
@@ -166,23 +174,60 @@ t1 <- t1 %>% gather(key = "timestep", value = "diff", -lu, - model)
 t1$timestep <- as.factor(rep(c(5, 10, 15, 20, 25, 27), each = K * 4))
 
 t1$model <- factor(t1$model, c("full", "semi", "naive", "null"))
-fig3b <- ggplot(t1, aes(x = timestep, y = diff, colour = model))
 
-fig3b <- fig3b + geom_point(position=position_dodge(0.5), shape = 16, size = 2) + 
+fig3b <- ggplot(t1, aes(x = timestep, y = diff, colour = model))
+fig3b <- fig3b + geom_point(position=position_dodge(0.5), shape = 16, size = 1.5) + 
   scale_colour_viridis_d(option = "plasma", begin = 0.2, end = 0.8) + 
   theme_bw() + 
-  ylab("disagreement [% of cells]") + 
+  ylab("disagreement [%]") + 
   xlab("Year") +
   theme(
-    legend.position = "right", 
+    legend.position = c(0.4, -0.5),
+    legend.direction = "horizontal",
     legend.title =  element_blank(),
     legend.text = element_text(size = 8, colour = "black"),
-    legend.margin=margin(c(0,0,0,0)))
+    legend.margin=margin(c(0,0,0,0)),
+    plot.margin=unit(c(5.5, 5.5, 18, 5.5), 'points')
+    )
 
+validation_results <- readRDS("validation_results.rds")
 
-png(file.path(figure_path, "figure3.png"), height = 140, width = 140, units = "mm", res = 1000)
-plot_grid(fig3a, fig3b, nrow = 2, labels = c("a)", "b)"), vjust = c(1.5, -1), rel_heights = c(3,2))
+rmse <- lapply(validation_results, FUN = function(x) {x[[1]]})
+mod <- lapply(validation_results, FUN = function(x) {x[[2]]})
+corre <- lapply(validation_results, FUN = function(x) {x[[3]]})
+x <- rmse[[1]]
+
+rmse <- lapply(rmse, FUN = function(x){lapply(x, FUN = function(x) x)})
+rmse <- do.call("c",rmse)
+rmse_final <- do.call("c", rmse)
+partype <- c("env", "neigh", "both")
+
+df <- data.frame("rmse" = log(rmse_final+.Machine$double.xmin), "predictors" = c(rep(partype, each = 8100826), rep(partype, each = 81340)), "resolution" = as.factor(c(rep(1, 3 * 8100826), rep(10, 3* 81340))))
+df_plot <- summarySE(df, measurevar = "rmse", groupvars=c("predictors", "resolution"))
+fig3c <- ggplot(df_plot, aes(x = resolution, y = rmse, col = predictors)) + 
+  geom_point(position=position_dodge(0.5), shape = 16, size = 1.5) + 
+  scale_colour_viridis_d(option = "viridis", begin = 0.2, end = 0.8) + 
+  geom_errorbar(aes(ymin=rmse-sd, ymax=rmse+sd), width=.1, position=position_dodge(0.5)) + 
+  theme_bw() +
+  ylab("log(rmse)") + 
+  xlab("Resolution [km^2]") +
+  theme(
+    legend.position = c(0.4, -0.5),
+    legend.direction = "horizontal",
+    legend.title =  element_blank(),
+    legend.text = element_text(size = 8, colour = "black"),
+    legend.margin=margin(c(0,0,0,0)),
+    plot.margin=unit(c(5.5, 5.5, 18, 5.5), 'points')
+  )
+
+fig3bc <- plot_grid(fig3b, fig3c, nrow = 1, labels = c("(b)", "(c)"), vjust = c(0, 0), label_size = 12, rel_widths = c(2.5, 2))
+pdf(file.path(figure_path, "validation_cells.pdf"), height = 4.5, width = 4.5)
+plot_grid(fig3a, fig3bc, nrow = 2, labels = c("(a)", ""), vjust = c(1.5, -1), rel_heights = c(3,2), label_size = 12)
 dev.off()
+
+newest <- readRDS(file = file.path("outputs", "lu_newestablishment.rds"))
+
+#### FIG 4 ####
 
 #1. Determine which land use classes are important for maybe 10 threatened species (observations) (using predicts)
 dom_obs <- lapply(lu_obs, FUN = function(x) { as.numeric(apply(x, 1, FUN =  function(x) { which(x == max(x), arr.ind = TRUE)[1]}))})
@@ -333,7 +378,7 @@ for(j in 1:2){
 }
 
 
-boundary <- readOGR("/Users/simon/OneDrive - The University of Melbourne/PhD - Large Files/PhD - Raw Data/Global/Amazon boundaries/Lim_Biogeografico.shp")
+boundary <- readOGR("/Users/simon/OneDrive - The University of Melbourne/PhD/chapter2/data/bnd_ama/Lim_Biogeografico.shp")
 boundary <- gSimplify(boundary, tol = 0.05)
 
 #Make levelplots of change rasters
@@ -374,10 +419,10 @@ legends_fig3 <- list()
 for(i in 1:2){
   
   if(i == 1){
-    lab <- c("no increase", "causing forest loss", "causing other habitat loss")
+    lab <- c("no increase in cropland", "net replacement of forest", "net replacement of other habitat")
   }
   if(i == 2){
-    lab <- c("no increase", "causing forest loss", "causing other habitat loss")
+    lab <- c("no increase in pasture", "net replacement of forest", "net replacement of other habitat")
   }
   
   leg_data <- tibble(label = lab)
@@ -393,9 +438,9 @@ for(i in 1:2){
   legends_fig3[[i]] <- cowplot::get_legend(my_hist)
 }
 
-png(file.path(figure_path, "figure4.png"), height = 140, width = 200, units = "mm", res = 1000)
+pdf(file.path(figure_path, "validation_agrhabitat.pdf"), height = 5, width = 7.1)
 plot_grid(
-  plot_grid(figs4[[1]], figs4[[2]], ncol = 1, labels= c("a)", "b)"), hjust = c(-1.5,-1.5), vjust = c(1.5, 0.5)),
+  plot_grid(figs4[[1]], figs4[[2]], ncol = 1, labels= c("(a)", "(b)"), hjust = c(-1.5,-1.5), vjust = c(1.5, 0.5), label_size = 12),
   plot_grid(
     plot_grid(maps[[1]], maps[[2]], ncol = 2), 
     legends_fig3[[1]], 
@@ -403,10 +448,12 @@ plot_grid(
     legends_fig3[[2]], nrow = 4, 
     
     rel_heights = c(1/1.25, 1/12, 1/1.25, 1/12), 
-    labels = c("c)", "", "d)", ""), vjust = c(1.5,1.5, 0.5, 1.5)), 
+    labels = c("(c)", "", "(d)", ""), vjust = c(2,2, 2, 2), label_size = 12), 
   rel_widths = c(1,3)
 )
 dev.off()
+
+#### FIG 1 ####
 
 r <- mask
 diff2 <- diff1 <- r
@@ -430,15 +477,10 @@ for(i in 1:nlayers(diffstack)){
                    strip.background=list(col='transparent'),
                    axis.line=list(col='transparent')
                  ),
+                 na.value = "transparent",
                  scales=list(draw=FALSE),
                  col.regions= plasma(30, begin = 0.2, end = 0.8)) +
     layer(sp.polygons(boundary, lwd=2))
-  if(i == 2){
-    l <- l + layer(panel.text(-58, 9, labels = "Agr. expansion", cex = 0.7, adj = 0, font = 2))
-  }
-  if(i == 1){
-    l <- l + layer(panel.text(-58, 9, labels = "Habitat loss", cex = 0.7, adj = 0, font = 2))
-  }
   maps2[[i]] <- l
 }
 
@@ -454,7 +496,7 @@ my_hist <- ggplot(leg_data, aes(x = change * 100, y = y, fill = change * 100)) +
   theme(legend.position="bottom",
         legend.box="horizontal",
         legend.text = element_text(size = 8, colour = "black"),
-        legend.margin=margin(t=0, r=3, b=0, l=-3, unit="cm"),
+        legend.margin=margin(t=0, r=2.5, b=0, l=-3, unit="cm"),
         panel.background = element_rect(fill = "transparent",colour = NA),
         plot.background = element_rect(fill = "transparent",colour = NA))
 
@@ -467,11 +509,16 @@ sa <- st_as_sf(sa)
 boundary_sf <- st_as_sf(boundary)
 cent <- st_centroid(boundary_sf)
 annotation <- data.frame(st_coordinates(st_cast(cent)), "label" = "Amazon catchment")
-
+annotation[,2] <- annotation[,2] - 0.5
+pa <- raster("/Users/simon/OneDrive - The University of Melbourne/PhD/chapter2/data/data_ama/temp/PA1992_ama.tif")
+pa[which(pa[] == 1)] <- NA
+pa <- gplot_data(pa)
 fig2a <- ggplot(data = sa) + 
   geom_sf(data = boundary_sf, fill = "darkgrey", colour = "darkgrey") +
   geom_sf(color = "black", fill = "transparent") +
-  geom_text(data = annotation, aes(x = X, y = Y, label = label, fontface = 2), size = 3.5, hjust = 0.2, vjust = 1) +
+  geom_tile(data = dplyr::filter(pa, !is.na(value)), 
+            aes(x = x, y = y), fill = "black") + 
+  #geom_text(data = annotation, aes(x = X, y = Y, label = label, fontface = 2), size = 3.5, hjust = 0.2, vjust = 1) +
   theme_bw() +
   theme(panel.border = element_blank(), 
         panel.grid.major = element_blank(),
@@ -487,21 +534,11 @@ fig2a <- ggplot(data = sa) +
 
 demands <- readRDS("/Users/simon/OneDrive - The University of Melbourne/PhD/chapter2/data/data_ama/demands.rds")
 dmd <- demands[c(1,27),-1]
-length(which(!is.na(mask[])))
-nrow(dat)
-# r[r%in%crop] <- 1
-# r[r%in%crop_mosaic] <- 2
-# r[r%in%forest] <- 3
-# r[r%in%grass] <- 4
-# r[r%in%shrub] <- 5
-# r[r%in%wetland] <- 6
-# r[r%in%urban] <- 7
-# r[r%in%other] <- 8
-# r[r%in%water] <- 9
 
-dmd_plotdata <- cbind(rowSums(dmd[,c(1:2)]),rowSums(dmd[,c(4:5)]), dmd[,3], rowSums(dmd[,c(6,8)]))
+
+dmd_plotdata <- cbind(rowSums(dmd[,c(1:2)]),rowSums(dmd[,c(4:5)]), dmd[,3])
 dmd_plotdata <- as.data.frame(rbind(dmd_plotdata, diff(dmd_plotdata))) * 100
-classes <- c("Cropland",  "Pasture (grass/shrub)", "Forest", "Other habitat")
+classes <- c("Cropping",  "Pasture", "Forest")
 colnames(dmd_plotdata) <- classes
 
 dmd_annotate <- round(dmd_plotdata[-3,], 3)
@@ -526,8 +563,8 @@ fig2b <- dmd_plotdata %>%
   ylab(NULL) +
   geom_text(aes(x = 0, y = y1992, label=v1992, hjust = ifelse(change > 0, 1,0)), size = 2.5, position = position_nudge(y = -0.05, x = 0.1 * c(-1, -1, 1, -1, -1, -1, -1))) +
   geom_text(aes(x = 0, y = y2018, label=v2018, hjust = ifelse(change > 0, 1,0)), size = 2.5, position = position_nudge(y = 0.05, x = 0.1 * c(-1, -1, 1, -1, -1, -1, -1))) +
-  geom_text(x = 6, y = 7.2, label = "top: 1992", size = 2.5, hjust = 1) +
-  geom_text(x = 6, y = 6.85, label = "bottom: 2018", size = 2.5, hjust = 1) +
+  #geom_text(x = 6, y = 3.2, label = "top: 1992", size = 2.5, hjust = 1) +
+  #geom_text(x = 6, y = 2.85, label = "bottom: 2018", size = 2.5, hjust = 1) +
   
   theme_bw() +   
   
@@ -537,20 +574,22 @@ fig2b <- dmd_plotdata %>%
     panel.border = element_blank(),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
-    plot.margin = unit(c(1,1,0.5,0), "cm"),
+    plot.margin = unit(c(1,0.5,1,0), "cm"),
     axis.ticks = element_blank()
   )
 
 
 
 fig2bleg <-plot_grid(fig2b, legend_fig2, ncol = 1, rel_heights = c(1, 0.1))
-fig2ab <- plot_grid(fig2a, fig2bleg, ncol = 2, labels = c("a)", "b)"))
-fig2c <- plot_grid(maps2[[2]], maps2[[1]],  ncol = 2)
+fig2ab <- plot_grid(fig2a, fig2bleg, ncol = 2, labels = c("(a)", "(b)"), label_size = 12)
+fig2c <- plot_grid(maps2[[2]], maps2[[1]],  ncol = 2, labels = c("Agricultural expansion", "Habitat decline"), 
+                   label_size = 8, vjust = 22, hjust = c(-0.3, -0.8))
 
-png(file.path(figure_path, "figure2.png"), height = 140, width = 140, units = "mm", res = 1000)
-plot_grid(fig2ab, fig2c, nrow = 2, labels = c("", "c)"), rel_heights = c(2, 1.5))
+pdf(file.path(figure_path, "studyarea.pdf"), height = 3, width = 4)
+#plot_grid(fig2ab, fig2c, nrow = 2, labels = c("", "(c)"), rel_heights = c(2, 1.5), label_size = 12)
+plot_grid(fig2a, fig2b, ncol = 2, labels = c("(a)", "(b)"), label_size = 12)
 dev.off()
 
 
-
 #The observed chanages are at similar magnitude to what we see in CGE models for Aus, Vietnam
+

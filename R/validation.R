@@ -3,9 +3,9 @@ rm(list = ls())
 require(raster)
 require(extraDistr)
 require(wrswoR)
-
-source("./R/functions.R")
-
+devtools::install("/Users/simon/OneDrive - The University of Melbourne/PhD/packages/flutes")
+library(flutes)
+suitmodel
 #---------------------------#
 #### 1. DATA PREPERATION ####
 #---------------------------#
@@ -16,6 +16,8 @@ data_path <- file.path(getwd(), "data", "data_ama")
 dat <- readRDS(file.path(data_path, "cov.rds")) #dynamic bioclimatic variables head(dat)
 lu_all <- readRDS(file.path(data_path, "lu.rds"))
 mask <- readRDS(file.path(data_path, "mask_ama.rds")) #country mask
+inds <- which(!is.na(mask[]))
+colnames(dat)
 
 ts <- 1991 + c(1, 5, 10, 15, 20, 25, 27)
 K <- ncol(lu_all)/length(ts)
@@ -45,11 +47,16 @@ preds <- colnames(data)
 #----------------------------#
 #### 2. SUITABILITY MODEL ####
 #----------------------------#
+
 form <- paste(preds, collapse = "+")
 subs_mod <- sample(1:nrow(lu), 50000)
-suitmod <- suitmodel(form = form, lu = lu[subs_mod,], data = data[subs_mod,], resolution = 10000, model = FALSE, maxit = 10000)
+suitmod <- suitmodel(form = form, lu = lu[subs_mod,], data = data[subs_mod,], resolution = 10000, model = FALSE, maxit = 10000, decay = 0.01)
 sm <- predict(suitmod, newdata = data, type = "probs")
 
+mod.loglik <- nnet:::logLik.multinom(suitmod)
+mod0 <- suitmodel(form = 1, data = data[subs_mod,], resolution = 10000, lu = lu[subs_mod,], decay = 0.001)
+mod0.loglik <- nnet:::logLik.multinom(mod0)
+mod.mfr2 <- as.numeric(1 - mod.loglik/mod0.loglik)
 #Determine how much we can allocate into cells that are 0
 #Turn lu data into a list of matrices (need to change code so it's stored this way to begin with)
 
@@ -72,11 +79,18 @@ for(i in 2:7){
   }
 }
 
+lu_classes <-  c("Cro", "CrM", "For", "Gra", "Shr", "Wet", "Urb", "Oth", "Wat")
+colnames(ch_ma) <- lu_classes
+rownames(ch_ma) <- ts[-1]
+ch_ma <- t(ch_ma)
+ch_ma <- cbind(ch_ma, "mean" = rowMeans(ch_ma))
+saveRDS(ch_ma, file = file.path("outputs", "lu_newestablishment.rds"))
+
 #-----------------#
 #### 3. DEMAND ####
 #-----------------#
 
-demands <- demand(landuse = lu_all, ts = ts, inds = NULL, k = K, type = "mean")[,1:(K+1)]
+demands <- demand(landuse = lu_all, ts = ts, k = K, type = "mean")[,1:(K+1)]
 demands[,1+K] <- rep(demands[1,1+K], nrow(demands)) # we assume lu 12 doesn't chnage (it's water courses)
 demands[,-1] <- demands[,-1]/rowSums(demands[,-1]) #rescaling this way will change lu 12 demand again, but it's minimal so negligible.
 saveRDS(demands, file = file.path(data_path, "demands.rds"))
@@ -89,7 +103,7 @@ saveRDS(demands, file = file.path(data_path, "demands.rds"))
 params <- list(
   max_dev = 1,
   resolution = 1000000,
-  growth = colMeans(ch_ma),
+  growth = ch_ma[,7],
   no_change = c(9)
 )
 
@@ -205,7 +219,7 @@ lu_ts <- list()
 lu_suit <- list()
 lu_pred <- matrix(NA, nrow(lu), ncol(lu))
 colnames(lu_pred) <- colnames(lu)
-#undebug(allocation)
+#debug(allocation)
 #Simulate time series
 for(i in 1:(length(ts)-1)){
   cat(paste0('\n', "Predicting suitability for time step ", i))

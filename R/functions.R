@@ -112,7 +112,7 @@ demand <- function(inds = NULL, landuse, ts, path = NULL, k, type = "mean"){
 ####------------------####
 ####5) Allocate demand####
 ####------------------####
-allocation <- function(lu, sm, params, dmd, ln, constraint, growth, pa = NULL){
+allocation <- function(lu, sm, params, dmd, ln, constraint, pa = NULL){
   
   #number of land use classes and number of cells
   k <- ncol(lu)
@@ -396,3 +396,21 @@ diff_metrics <- function(obs, preds, mask, reference = NULL,...){
   }
   out
 }
+
+#https://stackoverflow.com/questions/47116217/overlay-raster-layer-on-map-in-ggplot2-in-r
+gplot_data <- function(x, maxpixels = 50000)  {
+  x <- raster::sampleRegular(x, maxpixels, asRaster = TRUE)
+  coords <- raster::xyFromCell(x, seq_len(raster::ncell(x)))
+  ## Extract values
+  dat <- utils::stack(as.data.frame(raster::getValues(x))) 
+  names(dat) <- c('value', 'variable')
+  
+  dat <- dplyr::as.tbl(data.frame(coords, dat))
+  
+  if (!is.null(levels(x))) {
+    dat <- dplyr::left_join(dat, levels(x)[[1]], 
+                            by = c("value" = "ID"))
+  }
+  dat
+}
+
