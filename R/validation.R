@@ -40,8 +40,8 @@ dat <- dat[,-which(grepl("PA", colnames(dat)))]
 dat <- scale(dat)
 data <- cbind(dat, ln)
 
-#preds <- colnames(correlations(data, sub = nrow(data)))
-#data <- data[,colnames(data)%in%preds]
+preds <- colnames(correlations(data, sub = nrow(data)))
+data <- data[,colnames(data)%in%preds]
 preds <- colnames(data)
 
 #----------------------------#

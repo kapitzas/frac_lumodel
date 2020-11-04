@@ -6,15 +6,16 @@ rm(list = ls())
 require(raster)
 require(extraDistr)
 require(wrswoR)
+require(flutes)
 
-#source("./R/functions.R")
+source("./R/functions.R")
 
 #---------------------------#
 #### 1. DATA PREPERATION ####
 #---------------------------#
 
 # 1.a Load data
-data_paths <- c(file.path(getwd(), "data", "data_ama_1k"), file.path(getwd(), "data", "data_ama"))
+data_paths <- c(file.path(getwd(), "data", "data_ama"), file.path(getwd(), "data", "data_ama_1k"))
 validation_results <- list()
 
 for(z in 1:2){
@@ -47,9 +48,9 @@ for(z in 1:2){
   dat <- scale(dat)
   data <- cbind(dat, ln)
   
-  #corre <- correlations(data, sub = nrow(data)/50)
-  #preds <- colnames(corre)
-  #data <- data[,colnames(data)%in%preds]
+  corre <- correlations(data, sub = nrow(data)/50)
+  preds <- colnames(corre)
+  data <- data[,colnames(data)%in%preds]
   preds <- colnames(data)
   
   
@@ -84,7 +85,7 @@ for(z in 1:2){
   rmse <- list()
   j <- 1
   for (j in 1:length(partype)){
-    rmse.mod <- 1:length(inds)
+    rmse.mod <- data.frame("rmse" = 1:length(inds), "fold" = NA)
     coefs.mod <- list()
     i <- 1
     for(i in folds){
@@ -94,14 +95,15 @@ for(z in 1:2){
       train_inds <- which(tras_subs%in%train)
       suitmod <- suitmodel(form = forms[[j]], lu = lu_subs[train_inds,], data = data_subs[train_inds,], resolution = 1000, model = FALSE, maxit = 1000, decay = 0.01)
       pred <- predict(suitmod, newdata = data[test_inds,], type = "probs")
-      rmse.mod[test_inds] <- sqrt(rowMeans((pred - lu[test_inds,])^2))
+      rmse.mod[test_inds, 1] <- sqrt(rowMeans((pred - lu[test_inds,])^2))
+      rmse.mod[test_inds, 2] <- i
       coefs.mod[[i]] <- coefficients(suitmod)
       print(i)
     }
     rmse[[j]] <- rmse.mod
     mod[[j]] <- coefs.mod
   }
-  validation_results[[z]] <- list(rmse, mod)
+  validation_results[[z]] <- list(rmse, mod, corre)
 }
 
 saveRDS(validation_results, "validation_results.rds")

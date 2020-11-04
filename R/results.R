@@ -1,5 +1,5 @@
 rm(list = ls())
-
+source("./R/functions.R")
 require(raster)
 require(matrixStats)
 require(tidyverse)
@@ -10,8 +10,9 @@ require(rasterVis)
 require(viridis)
 require(cowplot)
 require(sf)
+require(flutes)
 
-source("./R/functions.R")
+
 data_path <- file.path(getwd(), "data", "data_ama")
 lu_all <- readRDS(file.path(data_path, "lu.rds"))
 mask <- readRDS(file.path(data_path, "mask_ama.rds")) #country mask
@@ -190,26 +191,38 @@ fig3b <- fig3b + geom_point(position=position_dodge(0.5), shape = 16, size = 1.5
     plot.margin=unit(c(5.5, 5.5, 18, 5.5), 'points')
     )
 
+# Suitability model validation results
 validation_results <- readRDS("validation_results.rds")
 
 rmse <- lapply(validation_results, FUN = function(x) {x[[1]]})
-mod <- lapply(validation_results, FUN = function(x) {x[[2]]})
-corre <- lapply(validation_results, FUN = function(x) {x[[3]]})
-x <- rmse[[1]]
+str(rmse)
+resos <- c("10", "1")
+df_final <- list()
+mask <- readRDS(file.path("data", "data_ama_1k", "mask_ama.rds")) #country mask
+test <- mask
 
-rmse <- lapply(rmse, FUN = function(x){lapply(x, FUN = function(x) x)})
-rmse <- do.call("c",rmse)
-rmse_final <- do.call("c", rmse)
-partype <- c("env", "neigh", "both")
+for(i in 1:2){
+  dfout <- data.frame("env" = rmse[[i]][[1]][,1]-rmse[[i]][[3]][,1], 
+                      "neigh" = rmse[[i]][[2]][,1]-rmse[[i]][[3]][,1],
+                      "folds" = rmse[[i]][[1]][,2],
+                      "resolution" = rep(resos[i], length(rmse[[i]][[1]][,1]))
+                      )
+  df_final[[i]] <- dfout
+}
 
-df <- data.frame("rmse" = log(rmse_final+.Machine$double.xmin), "predictors" = c(rep(partype, each = 8100826), rep(partype, each = 81340)), "resolution" = as.factor(c(rep(1, 3 * 8100826), rep(10, 3* 81340))))
-df_plot <- summarySE(df, measurevar = "rmse", groupvars=c("predictors", "resolution"))
-fig3c <- ggplot(df_plot, aes(x = resolution, y = rmse, col = predictors)) + 
+df_final <- tibble(do.call("rbind", df_final))
+
+df_final %>% gather(key = model, value = rmse, "env", "neigh") -> df_final
+
+
+df_plot <- summarySE(df_final*100, measurevar = "rmse", groupvars=c("resolution", "model"))
+
+fig3c <- ggplot(df_plot, aes(x = resolution, y = rmse, col = model)) + 
   geom_point(position=position_dodge(0.5), shape = 16, size = 1.5) + 
   scale_colour_viridis_d(option = "viridis", begin = 0.2, end = 0.8) + 
-  geom_errorbar(aes(ymin=rmse-sd, ymax=rmse+sd), width=.1, position=position_dodge(0.5)) + 
+  geom_errorbar(aes(ymin=min, ymax=max), width=.1, position=position_dodge(0.5))+ 
   theme_bw() +
-  ylab("log(rmse)") + 
+  ylab("RMSE difference") + 
   xlab("Resolution [km^2]") +
   theme(
     legend.position = c(0.4, -0.5),
