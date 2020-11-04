@@ -1,6 +1,6 @@
-####---------------------------------####
-####7) Some plotting/helper functions####
-####---------------------------------####
+####-------------------------------####
+#### Some plotting/helper functions####
+####-------------------------------####
 
 makeRaster <- function(mask, lu, ts = NULL, class = NULL){
   if(!is.null(ts)){

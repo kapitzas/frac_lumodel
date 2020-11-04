@@ -122,6 +122,7 @@ cat0/catall * 100
 
 which(data_aggr$category == "more than 50% change")
 str(data_aggr$category)
+
 data_aggr[,c(5:8)] <- data_aggr[,c(5:8)] * 100
 # Use a consistent y range
 figure_path <- "/Users/simon/OneDrive - The University of Melbourne/PhD/writing/papers/MEE/figures/"
@@ -195,7 +196,6 @@ fig3b <- fig3b + geom_point(position=position_dodge(0.5), shape = 16, size = 1.5
 validation_results <- readRDS("validation_results.rds")
 
 rmse <- lapply(validation_results, FUN = function(x) {x[[1]]})
-str(rmse)
 resos <- c("10", "1")
 df_final <- list()
 mask <- readRDS(file.path("data", "data_ama_1k", "mask_ama.rds")) #country mask
@@ -214,8 +214,7 @@ df_final <- tibble(do.call("rbind", df_final))
 
 df_final %>% gather(key = model, value = rmse, "env", "neigh") -> df_final
 
-
-df_plot <- summarySE(df_final*100, measurevar = "rmse", groupvars=c("resolution", "model"))
+df_plot <- summarySE(df_final, measurevar = "rmse", groupvars=c("resolution", "model"))
 
 fig3c <- ggplot(df_plot, aes(x = resolution, y = rmse, col = model)) + 
   geom_point(position=position_dodge(0.5), shape = 16, size = 1.5) + 

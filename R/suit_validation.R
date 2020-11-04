@@ -77,23 +77,25 @@ for(z in 1:2){
   # Build model
   partype <- c("env", "neigh", "both")
   
+  # Set up model forumals for differnet models
   forms <- list(paste(preds[-which(grepl(preds, pattern = "ts"))], collapse = "+"),
                 paste(preds[which(grepl(preds, pattern = "ts"))], collapse = "+"),
                 paste(preds, collapse = "+"))
   
   mod <- list()
   rmse <- list()
-  j <- 1
+  
+  # Loop through covariate sets ("models")
   for (j in 1:length(partype)){
     rmse.mod <- data.frame("rmse" = 1:length(inds), "fold" = NA)
     coefs.mod <- list()
-    i <- 1
+    # Loop through folds
     for(i in folds){
       test <- i
       test_inds <- which(tras%in%test)
       train <- folds[!folds%in%test]
       train_inds <- which(tras_subs%in%train)
-      suitmod <- suitmodel(form = forms[[j]], lu = lu_subs[train_inds,], data = data_subs[train_inds,], resolution = 1000, model = FALSE, maxit = 1000, decay = 0.01)
+      suitmod <- suitmodel(form = forms[[j]], lu = lu_subs[train_inds,], data = data_subs[train_inds,], resolution = 1000, model = FALSE, maxit = 1000, decay = 0)
       pred <- predict(suitmod, newdata = data[test_inds,], type = "probs")
       rmse.mod[test_inds, 1] <- sqrt(rowMeans((pred - lu[test_inds,])^2))
       rmse.mod[test_inds, 2] <- i
