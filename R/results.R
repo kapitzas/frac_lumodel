@@ -124,6 +124,7 @@ which(data_aggr$category == "more than 50% change")
 str(data_aggr$category)
 
 data_aggr[,c(5:8)] <- data_aggr[,c(5:8)] * 100
+
 # Use a consistent y range
 figure_path <- "/Users/simon/OneDrive - The University of Melbourne/PhD/writing/papers/MEE/figures/"
 fig3a <- ggplot(data_aggr, aes(x=Year, y=diffs, colour=model)) + scale_colour_viridis_d(option = "plasma", begin = 0.2, end = 0.6)
@@ -213,13 +214,19 @@ for(i in 1:2){
 df_final <- tibble(do.call("rbind", df_final))
 
 df_final %>% gather(key = model, value = rmse, "env", "neigh") -> df_final
+str(df_final)
+#df_plot <- summarySE(df_final, measurevar = "rmse", groupvars=c("resolution", "model", "folds"))
 
-df_plot <- summarySE(df_final, measurevar = "rmse", groupvars=c("resolution", "model"))
+df_final %>%
+  group_by(resolution, model, folds) %>% #calculate fold-wise rmse means for each res and model
+  summarize_at("rmse", list(fold.means = mean)) %>%
+  group_by(resolution, model) %>% #calculate mean of fold means and min/max range
+  summarize_at("fold.means", list(mean = mean, min = min, max = max, sd = sd)) -> df_plot
 
-fig3c <- ggplot(df_plot, aes(x = resolution, y = rmse, col = model)) + 
+fig3c <- ggplot(df_plot, aes(x = resolution, y = mean, col = model)) + 
   geom_point(position=position_dodge(0.5), shape = 16, size = 1.5) + 
   scale_colour_viridis_d(option = "viridis", begin = 0.2, end = 0.8) + 
-  geom_errorbar(aes(ymin=min, ymax=max), width=.1, position=position_dodge(0.5))+ 
+  geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=.1, position=position_dodge(0.5))+ 
   theme_bw() +
   ylab("RMSE difference") + 
   xlab("Resolution [km^2]") +
@@ -231,6 +238,12 @@ fig3c <- ggplot(df_plot, aes(x = resolution, y = rmse, col = model)) +
     legend.margin=margin(c(0,0,0,0)),
     plot.margin=unit(c(5.5, 5.5, 18, 5.5), 'points')
   )
+
+fig3c
+require(dplyr)
+mtcars %>%
+  group_by(cyl) %>%
+  summarize_at()
 
 fig3bc <- plot_grid(fig3b, fig3c, nrow = 1, labels = c("(b)", "(c)"), vjust = c(0, 0), label_size = 12, rel_widths = c(2.5, 2))
 pdf(file.path(figure_path, "validation_cells.pdf"), height = 4.5, width = 4.5)

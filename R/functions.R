@@ -56,9 +56,7 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
                  .fun = function(xx, col) {
                    c(N    = length2(xx[[col]], na.rm=na.rm),
                      mean = mean   (xx[[col]], na.rm=na.rm),
-                     sd   = sd     (xx[[col]], na.rm=na.rm),
-                     min  = min    (xx[[col]], na.rm=na.rm),
-                     max  = max    (xx[[col]], na.rm=na.rm)
+                     sd   = sd     (xx[[col]], na.rm=na.rm)
                    )
                  },
                  measurevar
