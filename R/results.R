@@ -199,8 +199,6 @@ validation_results <- readRDS("validation_results.rds")
 rmse <- lapply(validation_results, FUN = function(x) {x[[1]]})
 resos <- c("10", "1")
 df_final <- list()
-mask <- readRDS(file.path("data", "data_ama_1k", "mask_ama.rds")) #country mask
-test <- mask
 
 for(i in 1:2){
   dfout <- data.frame("env" = rmse[[i]][[1]][,1]-rmse[[i]][[3]][,1], 
@@ -214,8 +212,6 @@ for(i in 1:2){
 df_final <- tibble(do.call("rbind", df_final))
 
 df_final %>% gather(key = model, value = rmse, "env", "neigh") -> df_final
-str(df_final)
-#df_plot <- summarySE(df_final, measurevar = "rmse", groupvars=c("resolution", "model", "folds"))
 
 df_final %>%
   group_by(resolution, model, folds) %>% #calculate fold-wise rmse means for each res and model
@@ -223,12 +219,12 @@ df_final %>%
   group_by(resolution, model) %>% #calculate mean of fold means and min/max range
   summarize_at("fold.means", list(mean = mean, min = min, max = max, sd = sd)) -> df_plot
 
-fig3c <- ggplot(df_plot, aes(x = resolution, y = mean, col = model)) + 
+fig3c <- ggplot(df_plot, aes(x = resolution, y = mean*100, col = model)) + 
   geom_point(position=position_dodge(0.5), shape = 16, size = 1.5) + 
   scale_colour_viridis_d(option = "viridis", begin = 0.2, end = 0.8) + 
-  geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=.1, position=position_dodge(0.5))+ 
+  geom_errorbar(aes(ymin=(mean-sd)*100, ymax=(mean+sd)*100), width=.1, position=position_dodge(0.5)) + 
   theme_bw() +
-  ylab("RMSE difference") + 
+  ylab("RMSE diff x 100") + 
   xlab("Resolution [km^2]") +
   theme(
     legend.position = c(0.4, -0.5),
@@ -239,12 +235,6 @@ fig3c <- ggplot(df_plot, aes(x = resolution, y = mean, col = model)) +
     plot.margin=unit(c(5.5, 5.5, 18, 5.5), 'points')
   )
 
-fig3c
-require(dplyr)
-mtcars %>%
-  group_by(cyl) %>%
-  summarize_at()
-
 fig3bc <- plot_grid(fig3b, fig3c, nrow = 1, labels = c("(b)", "(c)"), vjust = c(0, 0), label_size = 12, rel_widths = c(2.5, 2))
 pdf(file.path(figure_path, "validation_cells.pdf"), height = 4.5, width = 4.5)
 plot_grid(fig3a, fig3bc, nrow = 2, labels = c("(a)", ""), vjust = c(1.5, -1), rel_heights = c(3,2), label_size = 12)
@@ -254,13 +244,13 @@ newest <- readRDS(file = file.path("outputs", "lu_newestablishment.rds"))
 
 #### FIG 4 ####
 
-#1. Determine which land use classes are important for maybe 10 threatened species (observations) (using predicts)
+#1. Determine agricultural land (pasture, crop) increase on natural habitat types (forest, grass/shrub etc)
 dom_obs <- lapply(lu_obs, FUN = function(x) { as.numeric(apply(x, 1, FUN =  function(x) { which(x == max(x), arr.ind = TRUE)[1]}))})
 dom_full <- lapply(preds_full, FUN = function(x) {as.numeric(apply(x, 1, FUN =  function(x) { which(x == max(x), arr.ind = TRUE)[1]}))}) #not the same as above
 inds <- which(!is.na(mask[]))
 
 agrexp_hloss <- list()
-i <- 1
+
 for (i in 1:length(preds_full)){
   
   r <- mask
@@ -349,6 +339,7 @@ for (i in 1:length(preds_full)){
 }
 
 agrexp_hloss2 <- list(list(), list())
+
 for(i in 1:6){
   agrexp_hloss2[[1]][[i]] <- agrexp_hloss[[i]][[1]]
   agrexp_hloss2[[2]][[i]] <- agrexp_hloss[[i]][[2]]
