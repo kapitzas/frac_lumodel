@@ -2,43 +2,7 @@
 #### Some plotting/helper functions####
 ####-------------------------------####
 
-makeRaster <- function(mask, lu, ts = NULL, class = NULL){
-  if(!is.null(ts)){
-    lu <- lu[[ts]]
-  }
-  if(!is.null(class)){
-    mask[which(!is.na(mask[]))] <- lu[,class]
-  }else{
-    mask[which(!is.na(mask[]))] <- lu
-  }
-  
-  mask
-}
-
-#Apply neighbourhood raster
-
-elasticities <- function(change, elas){
-  
-  for(i in 1:length(elas)){
-    fq <- (1-elas[i])/2
-    sq <- elas[i] + fq
-    qs <- quantile(change[,i], c(fq, sq))
-    inds <- which(change[,i] >= qs[1] & change[,i] <= qs[2])
-    change[inds,i] <- 0
-  }
-  change
-}
-
-elasticities2 <- function(ideal_change, elas){
-  for(i in 1:length(elas)){
-    size <- ceiling(nrow(ideal_change) * (1-elas[i]))
-    inds <- sample(1:length(ideal_change[,i]), size = size)
-    ideal_change[-inds,i] <- 0
-  }
-  ideal_change
-}
-
-#below is from http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/
+# summarySE is from http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/
 
 summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
                       conf.interval=.95, .drop=TRUE) {
@@ -75,7 +39,7 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
   return(datac)
 }
 
-#Caluclate metrics
+# Calculate difference metrics according to Pontius 2011 (for Fig. 3. b) 
 diff_metrics <- function(obs, preds, mask, reference = NULL,...){
   K <- ncol(lu_obs[[1]])
   preds <- c(obs[1], preds[1:6])
@@ -105,7 +69,7 @@ diff_metrics <- function(obs, preds, mask, reference = NULL,...){
   out
 }
 
-#https://stackoverflow.com/questions/47116217/overlay-raster-layer-on-map-in-ggplot2-in-r
+# this function is from https://stackoverflow.com/questions/47116217/overlay-raster-layer-on-map-in-ggplot2-in-r
 gplot_data <- function(x, maxpixels = 50000)  {
   x <- raster::sampleRegular(x, maxpixels, asRaster = TRUE)
   coords <- raster::xyFromCell(x, seq_len(raster::ncell(x)))
